@@ -6,6 +6,12 @@ using Core.Entities;
 public class MediaAggregator
 {
     private readonly List<MediaWork> _works = new();
+    private readonly IJitenApiClient _jitenApiClient;
+
+    public MediaAggregator(IJitenApiClient jitenApiClient)
+    {
+        _jitenApiClient = jitenApiClient;
+    }
 
     public async Task<MediaWork> ImportTtsuSessionsAsync(List<TtsuReaderDTO> ttsuEntries)
     {
@@ -15,7 +21,8 @@ public class MediaAggregator
         string bookTitle = ttsuEntries.First().Title;
 
         // Attempt Jiten lookup (returns null if not found)
-        JitenDeckDTO? jitenDeck = await JitenApiClient.GetMediaFromQueryAsync(bookTitle);
+        JitenDeckDTO? jitenDeck = (await _jitenApiClient.SearchBooksAsync(bookTitle))
+            .FirstOrDefault();
 
         var work = new MediaWork(bookTitle)
         {
