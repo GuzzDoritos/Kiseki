@@ -6,7 +6,7 @@ public class MediaWork
     protected MediaWork() { }
 
     // Primary domain constructor
-    public MediaWork(string title, int? jitenDeckId = null)
+    public MediaWork(string title, int? jitenDeckId = null, int? jitenCharCount = null)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -15,6 +15,7 @@ public class MediaWork
 
         Title = title;
         JitenDeckId = jitenDeckId;
+        JitenCharacterCount = jitenCharCount;
     }
 
     public Guid Id { get; set; } = Guid.NewGuid();

@@ -2,10 +2,9 @@
 using Core.DTOs;
 using Core.Entities;
 using Core.Services;
+using Microsoft.EntityFrameworkCore;
 using Spectre.Console;
 using System.Text;
-using System.Text.Json;
-using System.Xml.Linq;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -13,22 +12,28 @@ var context = new ImmersionDbContext();
 
 List<TtsuBookContainer> ttsuBooks = await TtsuDataLoader.LoadTtsuData();
 
-var choice = AnsiConsole.Prompt(
-    new SelectionPrompt<string>()
+SelectionPrompt<string> homePrompt = new SelectionPrompt<string>()
         .Title("Select an [green]option[/]:")
-        .AddChoices("Add Media", "Load from Ttsu folder", "Exit"));
+        .AddChoices("Add Media", "Load from Ttsu folder", "Exit");
 
-while (choice != "Exit")
-{
-    if (choice == "Add Media")
-    {
-        var mediaChoice = AnsiConsole.Prompt(
-            new SelectionPrompt<string>()
+SelectionPrompt<string> pickMediaTypePrompt = new SelectionPrompt<string>()
                 .Title("Select a [green]media type[/]:")
-                .AddChoices("Book", "Anime", "Go back"));
+                .AddChoices("Book", "Anime", "Go back");
+
+var choice = AnsiConsole.Prompt(homePrompt);
+
+async Task AddMediaRoutine()
+{
+    var mediaChoice = AnsiConsole.Prompt(pickMediaTypePrompt);
         if (mediaChoice == "Book")
         {
-            if (ttsuBooks.Count > 0)
+            await PickBook();
+        }
+}
+
+async Task PickBook()
+{
+    if (ttsuBooks.Count > 0)
             {
                 string userChoice1 = "Add book from ttsu folder (with stats)";
                 string userChoice2 = "Add book from Jiten (no stats, can be linked later)";
@@ -46,12 +51,15 @@ while (choice != "Exit")
                             .EnableSearch());
                     AnsiConsole.MarkupLine($"[blue]Title:[/] {bookChoice.Title}");
                     AnsiConsole.MarkupLine($"[blue]Title:[/] {bookChoice}");
+                    
                     var newBook = new MediaWork(bookChoice.Title);
                     foreach(var e in bookChoice.Entries)
                     {
-                        var log = new ImmersionLog();
-                        log.CharactersRead = e.CharactersRead;
-                        log.TimeSpentMinutes = e.ReadingTime;
+                        var log = new ImmersionLog
+                        {
+                            CharactersRead = e.CharactersRead,
+                            TimeSpentMinutes = e.ReadingTime
+                        };
                         newBook.Logs.Add(log);
                         context.Add(log);    
                     }
@@ -71,17 +79,70 @@ while (choice != "Exit")
                 if (userPick == userChoice2)
                 {
                     string query = AnsiConsole.Ask<string>("Search query for [green]book[/].");
-                    var book = JitenApiClient.GetMediaFromQueryAsync(query).Result;
                     AnsiConsole.MarkupLine($"[green]Querying...[/]");
-                    AnsiConsole.MarkupLine($"Hello, [blue]{book.DeckId} {book.OriginalTitle} {book.CharacterCount}[/]!");
+                    var book = await JitenApiClient.GetMediaFromQueryAsync(query);
+
+                    if (book is null) 
+                    {
+                        AnsiConsole.MarkupLine("[red]No book found.[/]");
+                        return;
+                    }
+
+                    var table = new Table()
+                        .Border(TableBorder.Rounded)
+                        .BorderColor(Color.Blue)
+                        .Title("[green]Jiten result[/]");
+
+                    table.AddColumn("Field");
+                    table.AddColumn("Value");
+
+                    table.AddRow("Deck ID", book.DeckId.ToString());
+                    table.AddRow("Original title", Markup.Escape(book.OriginalTitle));
+                    table.AddRow("Romaji title", Markup.Escape(book.RomajiTitle));
+                    table.AddRow("English title", Markup.Escape(book.EnglishTitle?? "None"));
+                    table.AddRow("Release date", book.ReleaseDate?.ToString("yyyy-MM-dd") ?? "Unknown");
+                    table.AddRow("Characters", book.CharacterCount.ToString("N0"));
+
+                    AnsiConsole.Write(table);
+
+                    if (AnsiConsole.Confirm("Use this result?"))
+                    {
+                        MediaWork mediaWork = new(book.OriginalTitle, book.DeckId, book.CharacterCount);
+
+                        context.MediaWorks.Add(mediaWork);
+                        await context.SaveChangesAsync();
+
+                        var mediaWorks = await context.MediaWorks.ToListAsync();
+
+                        var tableMW = new Table()
+                                    .Border(TableBorder.Rounded)
+                                    .AddColumn("ID")
+                                    .AddColumn("Title")
+                                    .AddColumn("Characters");
+
+                        foreach (var m in mediaWorks)
+                        {
+                            tableMW.AddRow(
+                                m.Id.ToString(),
+                                Markup.Escape(m.Title),
+                                m.TotalCharacters.ToString("N0"));
+                        }
+
+                        AnsiConsole.Write(tableMW);
+            }
                 }
             }
-        }
+}
+
+// main loop
+
+while (choice != "Exit")
+{
+    if (choice == "Add Media")
+    {
+        await AddMediaRoutine();
     }
-    choice = AnsiConsole.Prompt(
-    new SelectionPrompt<string>()
-        .Title("Select an [green]option[/]:")
-        .AddChoices("Add Media", "Load from Ttsu folder", "Exit"));
+    choice = AnsiConsole.Prompt(homePrompt);
 }
 
 AnsiConsole.MarkupLine($"[blue]Exiting...[/]");
