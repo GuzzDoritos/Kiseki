@@ -1,7 +1,12 @@
+using Core;
+using Core.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+builder.Services.AddDbContext<ImmersionDbContext>();
+builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>();
 
 var app = builder.Build();
 

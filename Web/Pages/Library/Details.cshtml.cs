@@ -1,0 +1,13 @@
+using Microsoft.AspNetCore.Mvc.RazorPages;
+
+namespace Web.Pages.Library;
+
+public class DetailsModel : PageModel
+{
+    public Guid Id { get; private set; }
+
+    public void OnGet(Guid id)
+    {
+        Id = id;
+    }
+}

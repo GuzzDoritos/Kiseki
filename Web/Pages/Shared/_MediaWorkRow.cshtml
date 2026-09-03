@@ -1,0 +1,15 @@
+@model MediaWorkListItemViewModel
+
+<article class="media-row">
+    <div class="media-row-main">
+        <span class="media-badge media-badge-@Model.MediaType.ToString().ToLowerInvariant()">@Model.MediaType</span>
+        <div>
+            <a class="media-title" asp-page="/Library/Details" asp-route-id="@Model.Id">@Model.Title</a>
+            <div class="media-meta">@(Model.SeriesTitle ?? "Standalone")</div>
+        </div>
+    </div>
+    <partial name="_ProgressBar" model="new ProgressBarViewModel(Model.CharactersRead, Model.TotalCharacters)" />
+    <div class="jiten-status @(Model.IsJitenLinked ? "linked" : string.Empty)">
+        @(Model.IsJitenLinked ? "Jiten linked" : "Not linked")
+    </div>
+</article>

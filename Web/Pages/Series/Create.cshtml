@@ -1,0 +1,33 @@
+@page
+@model Web.Pages.Series.CreateModel
+@{
+    ViewData["Title"] = "Create series";
+}
+
+<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+    <a asp-page="/Series/Index">Series</a><span>/</span><span>Create</span>
+</nav>
+
+<div class="page-header compact">
+    <div><p class="eyebrow">Organization</p><h1>Create series</h1></div>
+</div>
+
+<section class="content-card form-card">
+    <div class="scaffold-notice">This form is ready for the upcoming series application service.</div>
+    <form method="post">
+        <div class="form-stack">
+            <div>
+                <label class="form-label" asp-for="Input.Title"></label>
+                <input class="form-control" asp-for="Input.Title" placeholder="e.g. Re:Zero Light Novels" />
+            </div>
+            <div>
+                <label class="form-label" asp-for="Input.MediaType"></label>
+                <select class="form-select" asp-for="Input.MediaType" asp-items="Html.GetEnumSelectList<MediaType>()"></select>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" type="submit" disabled>Create series</button>
+            <a class="btn btn-link" asp-page="/Series/Index">Cancel</a>
+        </div>
+    </form>
+</section>

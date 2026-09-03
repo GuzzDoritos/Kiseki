@@ -1,0 +1,38 @@
+@{
+    var currentPage = ViewContext.RouteData.Values["page"]?.ToString() ?? string.Empty;
+    string ActiveFor(string pagePrefix) =>
+        currentPage.StartsWith(pagePrefix, StringComparison.OrdinalIgnoreCase)
+            ? "active"
+            : string.Empty;
+}
+
+<div class="sidebar-content">
+    <a class="app-brand d-none d-lg-flex" asp-page="/Index">
+        <span class="brand-mark">I</span>
+        <span>Immersion Tracker</span>
+    </a>
+
+    <nav class="app-nav" aria-label="Primary navigation">
+        <a class="app-nav-link @ActiveFor("/Index")" asp-page="/Index">
+            <span class="nav-symbol">⌂</span>
+            <span>Dashboard</span>
+        </a>
+        <a class="app-nav-link @ActiveFor("/Library")" asp-page="/Library/Index">
+            <span class="nav-symbol">▤</span>
+            <span>Library</span>
+        </a>
+        <a class="app-nav-link @ActiveFor("/Series")" asp-page="/Series/Index">
+            <span class="nav-symbol">▦</span>
+            <span>Series</span>
+        </a>
+        <a class="app-nav-link @ActiveFor("/Import")" asp-page="/Import/Index">
+            <span class="nav-symbol">＋</span>
+            <span>Import</span>
+        </a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <span>Local library</span>
+        <small>Personal immersion data</small>
+    </div>
+</div>

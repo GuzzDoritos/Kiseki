@@ -1,0 +1,33 @@
+@page
+@model Web.Pages.Import.IndexModel
+@{
+    ViewData["Title"] = "Import";
+}
+
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Add media</p>
+        <h1>Import</h1>
+        <p class="page-description">Choose where the work and its metadata should come from.</p>
+    </div>
+</div>
+
+<section class="choice-grid">
+    <a class="choice-card" asp-page="/Import/Ttsu">
+        <span class="choice-icon">T</span>
+        <div>
+            <h2>Import from Ttsu</h2>
+            <p>Bring in reading sessions first, then resolve series and Jiten metadata.</p>
+        </div>
+        <span class="choice-arrow">→</span>
+    </a>
+
+    <a class="choice-card" asp-page="/Import/Jiten">
+        <span class="choice-icon">J</span>
+        <div>
+            <h2>Search Jiten</h2>
+            <p>Add a deck or individual subdeck without existing reading history.</p>
+        </div>
+        <span class="choice-arrow">→</span>
+    </a>
+</section>

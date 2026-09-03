@@ -1,0 +1,49 @@
+@page
+@model Web.Pages.Library.IndexModel
+@{
+    ViewData["Title"] = "Library";
+}
+
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Your collection</p>
+        <h1>Library</h1>
+        <p class="page-description">Browse every individually tracked work across your media.</p>
+    </div>
+    <a class="btn btn-primary" asp-page="/Import/Index">Add media</a>
+</div>
+
+<section class="content-card filter-bar" aria-label="Library filters">
+    <div class="filter-tabs" role="group" aria-label="Media type">
+        <button type="button" class="filter-tab active">All</button>
+        <button type="button" class="filter-tab">Books</button>
+        <button type="button" class="filter-tab">Anime</button>
+        <button type="button" class="filter-tab">Games</button>
+    </div>
+    <div class="filter-fields">
+        <label class="visually-hidden" for="library-search">Search library</label>
+        <input id="library-search" class="form-control" type="search" placeholder="Search library…" disabled />
+        <select class="form-select" aria-label="Status" disabled>
+            <option>Status: All</option>
+        </select>
+    </div>
+</section>
+
+@if (Model.Works.Count > 0)
+{
+    <section class="media-list">
+        @foreach (var work in Model.Works)
+        {
+            <partial name="_MediaWorkRow" model="work" />
+        }
+    </section>
+}
+else
+{
+    <section class="content-card empty-state">
+        <div class="empty-icon">▤</div>
+        <h2>No web library entries yet</h2>
+        <p>The layout is ready. Connecting this page to the existing Core database is the next vertical slice.</p>
+        <a class="btn btn-primary" asp-page="/Import/Index">Choose an import method</a>
+    </section>
+}

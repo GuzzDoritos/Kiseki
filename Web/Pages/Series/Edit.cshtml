@@ -1,0 +1,28 @@
+@page "{id:guid}"
+@model Web.Pages.Series.EditModel
+@{
+    ViewData["Title"] = "Edit series";
+}
+
+<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+    <a asp-page="/Series/Index">Series</a><span>/</span>
+    <a asp-page="/Series/Details" asp-route-id="@Model.Id">Series details</a><span>/</span><span>Edit</span>
+</nav>
+
+<div class="page-header compact">
+    <div><p class="eyebrow">Organization</p><h1>Edit series</h1></div>
+</div>
+
+<section class="content-card form-card">
+    <div class="scaffold-notice">Series editing will be enabled with the Core application service.</div>
+    <form method="post">
+        <div class="form-stack">
+            <div><label class="form-label">Title</label><input class="form-control" /></div>
+            <div><label class="form-label">Media type</label><select class="form-select"><option>Book</option><option>Anime</option><option>Game</option></select></div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" type="submit" disabled>Save changes</button>
+            <a class="btn btn-link" asp-page="/Series/Details" asp-route-id="@Model.Id">Cancel</a>
+        </div>
+    </form>
+</section>

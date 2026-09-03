@@ -1,10 +1,42 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Dashboard";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Overview</p>
+        <h1>Dashboard</h1>
+        <p class="page-description">See what you are reading and where your immersion time is going.</p>
+    </div>
+    <a class="btn btn-primary" asp-page="/Import/Index">Add media</a>
 </div>
+
+<section class="stat-grid" aria-label="Immersion summary">
+    <article class="stat-card">
+        <span class="stat-label">Characters this week</span>
+        <strong>—</strong>
+        <small>Waiting for library data</small>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Time this week</span>
+        <strong>—</strong>
+        <small>Waiting for session data</small>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Active works</span>
+        <strong>—</strong>
+        <small>Across all media types</small>
+    </article>
+</section>
+
+<section class="content-card empty-state">
+    <div class="empty-icon">◎</div>
+    <h2>Your dashboard is ready</h2>
+    <p>Once this project is connected to Core, active works and recent sessions will appear here.</p>
+    <div class="empty-actions">
+        <a class="btn btn-primary" asp-page="/Import/Index">Import your first work</a>
+        <a class="btn btn-outline-secondary" asp-page="/Library/Index">Open library</a>
+    </div>
+</section>
