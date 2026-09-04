@@ -1,6 +1,7 @@
 using Core;
 using Core.DTOs;
 using Core.Entities;
+using Core.Services;
 using ImmersionTracker.ConsoleApp.Display;
 using Spectre.Console;
 
@@ -62,11 +63,7 @@ public sealed class AddMediaScreen
 
         foreach (var entry in bookChoice.Entries)
         {
-            newBook.Logs.Add(new ImmersionLog
-            {
-                CharactersRead = entry.CharactersRead,
-                TimeSpentMinutes = entry.ReadingTime
-            });
+            newBook.Logs.Add(entry.ToImmersionLog());
         }
 
         _context.MediaWorks.Add(newBook);
