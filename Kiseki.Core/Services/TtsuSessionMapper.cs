@@ -8,16 +8,21 @@ public static class TtsuSessionMapper
 {
     private const string DateFormat = "yyyy-MM-dd";
 
+    public static bool TryParseDate(string? dateKey, out DateOnly date)
+    {
+        return DateOnly.TryParseExact(
+            dateKey,
+            DateFormat,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out date);
+    }
+
     public static ImmersionLog ToImmersionLog(this TtsuReaderDTO entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        if (!DateOnly.TryParseExact(
-                entry.DateKey,
-                DateFormat,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var date))
+        if (!TryParseDate(entry.DateKey, out var date))
         {
             throw new FormatException(
                 $"TTSU dateKey '{entry.DateKey}' is not in the expected {DateFormat} format.");

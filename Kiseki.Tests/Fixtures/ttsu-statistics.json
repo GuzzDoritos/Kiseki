@@ -1,0 +1,16 @@
+[
+  {
+    "title": "Test Book",
+    "dateKey": "2026-08-05",
+    "charactersRead": 10370,
+    "readingTime": 2920.925,
+    "lastStatisticModified": 1785984891008
+  },
+  {
+    "title": "Test Book",
+    "dateKey": "2026-08-06",
+    "charactersRead": 8240,
+    "readingTime": 2415.5,
+    "lastStatisticModified": 1786071291008
+  }
+]

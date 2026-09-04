@@ -16,11 +16,10 @@ if (backupPath is not null)
         $"[grey]Database migrated. Backup: {Markup.Escape(backupPath)}[/]");
 }
 
-var ttsuBooks = await TtsuDataLoader.LoadTtsuData();
-
 IJitenApiClient jitenApiClient = new JitenApiClient();
+var ttsuDataLoader = new TtsuDataLoader();
 var jitenLinkScreen = new JitenLinkScreen(jitenApiClient);
-var addMediaScreen = new AddMediaScreen(context, ttsuBooks, jitenLinkScreen);
+var addMediaScreen = new AddMediaScreen(context, ttsuDataLoader, jitenLinkScreen);
 var libraryScreen = new LibraryScreen(context, jitenLinkScreen);
 var app = new KisekiApp(addMediaScreen, libraryScreen);
 

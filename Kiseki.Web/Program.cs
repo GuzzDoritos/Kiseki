@@ -1,5 +1,6 @@
 using Kiseki.Core;
 using Kiseki.Core.Services;
+using Kiseki.Web.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,9 +10,12 @@ var databasePath = Path.Join(
 
 // Add services to the container.
 builder.Services.AddRazorPages();
+builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<ImmersionDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>();
+builder.Services.AddSingleton<TtsuDataLoader>();
+builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
 
 var app = builder.Build();
 

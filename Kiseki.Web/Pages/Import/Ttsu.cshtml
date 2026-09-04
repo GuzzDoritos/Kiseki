@@ -1,24 +1,164 @@
 @page
 @model Kiseki.Web.Pages.Import.TtsuModel
 @{
-    ViewData["Title"] = "Import from Ttsu";
+    ViewData["Title"] = "Import from TTSU";
 }
 
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
-    <a asp-page="/Import/Index">Import</a><span>/</span><span>Ttsu</span>
+    <a asp-page="/Import/Index">Import</a><span>/</span><span>TTSU</span>
 </nav>
 
 <div class="page-header compact">
     <div>
         <p class="eyebrow">Reading history</p>
-        <h1>Import from Ttsu</h1>
-        <p class="page-description">Preview detected works before adding anything to the library.</p>
+        <h1>Import from TTSU</h1>
+        <p class="page-description">Choose your TTSU data folder, review the detected books, and confirm what belongs in your library.</p>
     </div>
 </div>
 
-<section class="content-card empty-state upload-state">
-    <div class="empty-icon">⇧</div>
-    <h2>Ttsu importer scaffold</h2>
-    <p>The existing Core loader will be exposed here in the next implementation step.</p>
-    <button class="btn btn-primary" type="button" disabled>Load Ttsu data</button>
+<div asp-validation-summary="All" class="import-validation" role="alert"></div>
+
+@if (Model.Warnings.Count > 0)
+{
+    <aside class="import-warnings" aria-label="Import warnings">
+        <strong>Some files need attention</strong>
+        <ul>
+            @foreach (var warning in Model.Warnings)
+            {
+                <li>@warning</li>
+            }
+        </ul>
+    </aside>
+}
+
+<section class="content-card ttsu-upload-card">
+    <form class="ttsu-upload-form"
+          method="post"
+          enctype="multipart/form-data"
+          asp-page-handler="Preview">
+        <div class="ttsu-folder-picker">
+            <svg class="ttsu-upload-icon" aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M3.5 7.5h6l1.8 2h9.2v8.75A2.25 2.25 0 0 1 18.25 20H5.75a2.25 2.25 0 0 1-2.25-2.25V7.5Z"></path>
+                <path d="M12 16V6m-3 3 3-3 3 3"></path>
+            </svg>
+            <div class="ttsu-picker-copy">
+                <strong>Select your TTSU data folder</strong>
+                <span data-ttsu-selection-summary>Only statistics files will be processed.</span>
+            </div>
+            <input class="visually-hidden"
+                   asp-for="FolderFiles"
+                   type="file"
+                   webkitdirectory
+                   multiple
+                   data-ttsu-folder-input />
+            <label class="btn btn-outline-secondary" asp-for="FolderFiles">Choose folder</label>
+        </div>
+
+        <div class="form-actions ttsu-upload-actions">
+            <button class="btn btn-primary" type="submit">Preview books</button>
+            @if (Model.HasPreview)
+            {
+                <span class="form-text">Selecting another folder will replace this preview.</span>
+            }
+        </div>
+    </form>
 </section>
+
+@if (Model.HasPreview)
+{
+    <section class="ttsu-preview" aria-labelledby="ttsu-preview-title">
+        <div class="ttsu-preview-heading">
+            <div>
+                <p class="eyebrow">Import preview</p>
+                <h2 id="ttsu-preview-title">@Model.Books.Count @(Model.Books.Count == 1 ? "book" : "books") detected</h2>
+            </div>
+            <span>Nothing has been saved yet</span>
+        </div>
+
+        <form method="post" asp-page-handler="Confirm">
+            <input type="hidden" asp-for="BatchId" />
+
+            <div class="ttsu-book-list">
+                @for (var index = 0; index < Model.Books.Count; index++)
+                {
+                    var book = Model.Books[index];
+                    <article class="content-card ttsu-book-preview">
+                        <input type="hidden" asp-for="Selections[index].BookKey" />
+
+                        <div class="ttsu-book-select">
+                            <input class="form-check-input"
+                                   asp-for="Selections[index].Selected"
+                                   aria-label="Select @book.Title for import" />
+                        </div>
+
+                        <div class="ttsu-book-copy">
+                            <h3>@book.Title</h3>
+                            @if (book.ExistsInLibrary)
+                            {
+                                <span class="import-match import-match-existing">Already in library</span>
+                            }
+                            else
+                            {
+                                <span class="import-match">New library work</span>
+                            }
+                        </div>
+
+                        <dl class="ttsu-book-stats">
+                            <div><dt>Sessions</dt><dd>@book.EntryCount.ToString("N0")</dd></div>
+                            <div><dt>Characters</dt><dd>@book.CharactersRead.ToString("N0")</dd></div>
+                            <div><dt>Reading time</dt><dd>@book.ReadingTimeLabel</dd></div>
+                            <div><dt>Date range</dt><dd>@book.DateRangeLabel</dd></div>
+                        </dl>
+
+                        <div class="ttsu-import-mode">
+                            @if (book.ExistsInLibrary)
+                            {
+                                <label asp-for="Selections[index].Mode">Import behavior</label>
+                                <select class="form-select" asp-for="Selections[index].Mode">
+                                    <option value="Merge">Update existing work</option>
+                                    <option value="Create">Create another copy</option>
+                                </select>
+                            }
+                            else
+                            {
+                                <input type="hidden" asp-for="Selections[index].Mode" />
+                            }
+                        </div>
+
+                        @if (book.Entries.Count > 0)
+                        {
+                            <details class="ttsu-entry-details">
+                                <summary>View reading entries</summary>
+                                <div class="ttsu-entry-table-wrap">
+                                    <table class="ttsu-entry-table">
+                                        <thead>
+                                            <tr><th>Date</th><th>Characters</th><th>Time</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var entry in book.Entries)
+                                            {
+                                                <tr>
+                                                    <td>@(entry.Date?.ToString("MMM d, yyyy") ?? "Unknown")</td>
+                                                    <td>@entry.CharactersRead.ToString("N0")</td>
+                                                    <td>@entry.ReadingTimeLabel</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </details>
+                        }
+                    </article>
+                }
+            </div>
+
+            <div class="form-actions ttsu-confirm-actions">
+                <button class="btn btn-primary" type="submit">Import selected books</button>
+                <button class="btn btn-link"
+                        type="submit"
+                        asp-page-handler="Cancel"
+                        formnovalidate>Cancel</button>
+            </div>
+        </form>
+    </section>
+}

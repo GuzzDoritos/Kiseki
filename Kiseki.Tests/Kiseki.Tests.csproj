@@ -25,7 +25,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Kiseki.Core\Kiseki.Core.csproj" />
+    <ProjectReference Include="..\Kiseki.Web\Kiseki.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\ttsu-statistics.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

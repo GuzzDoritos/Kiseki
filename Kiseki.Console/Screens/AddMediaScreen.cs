@@ -9,20 +9,21 @@ namespace Kiseki.Console.Screens;
 
 public sealed class AddMediaScreen
 {
+    private const string TtsuDataPathEnvironmentVariable = "KISEKI_TTSU_DATA_PATH";
     private const string TtsuChoice = "Add book from Ttsu folder (with stats)";
     private const string JitenChoice = "Add book from Jiten (no reading stats)";
 
     private readonly ImmersionDbContext _context;
-    private readonly List<TtsuBookContainer> _ttsuBooks;
+    private readonly TtsuDataLoader _ttsuDataLoader;
     private readonly JitenLinkScreen _jitenLinkScreen;
 
     public AddMediaScreen(
         ImmersionDbContext context,
-        List<TtsuBookContainer> ttsuBooks,
+        TtsuDataLoader ttsuDataLoader,
         JitenLinkScreen jitenLinkScreen)
     {
         _context = context;
-        _ttsuBooks = ttsuBooks;
+        _ttsuDataLoader = ttsuDataLoader;
         _jitenLinkScreen = jitenLinkScreen;
     }
 
@@ -46,7 +47,33 @@ public sealed class AddMediaScreen
 
     public async Task ImportFromTtsuAsync()
     {
-        if (_ttsuBooks.Count == 0)
+        var pathPrompt = new TextPrompt<string>("Enter the [green]TTSU data folder[/] path:")
+            .Validate(path => !string.IsNullOrWhiteSpace(path)
+                ? ValidationResult.Success()
+                : ValidationResult.Error("A folder path is required."));
+        var configuredPath = Environment.GetEnvironmentVariable(TtsuDataPathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            pathPrompt.DefaultValue(configuredPath);
+        }
+
+        var rootPath = AnsiConsole.Prompt(pathPrompt);
+        IReadOnlyList<TtsuBookContainer> ttsuBooks;
+        try
+        {
+            ttsuBooks = await _ttsuDataLoader.LoadDirectoryAsync(rootPath);
+        }
+        catch (Exception exception) when (exception is
+            DirectoryNotFoundException or
+            UnauthorizedAccessException or
+            IOException or
+            InvalidDataException)
+        {
+            AnsiConsole.MarkupLine($"[red]{Markup.Escape(exception.Message)}[/]");
+            return;
+        }
+
+        if (ttsuBooks.Count == 0)
         {
             AnsiConsole.MarkupLine("[yellow]No books were found in the Ttsu folder.[/]");
             return;
@@ -56,15 +83,10 @@ public sealed class AddMediaScreen
             new SelectionPrompt<TtsuBookContainer>()
                 .Title("Select a [green]book[/]:")
                 .UseConverter(book => Markup.Escape(book.Title))
-                .AddChoices(_ttsuBooks)
+                .AddChoices(ttsuBooks)
                 .EnableSearch());
 
-        var newBook = new MediaWork(bookChoice.Title, mediaType: MediaType.Book);
-
-        foreach (var entry in bookChoice.Entries)
-        {
-            newBook.Logs.Add(entry.ToImmersionLog());
-        }
+        var newBook = TtsuBookImporter.CreateMediaWork(bookChoice);
 
         _context.MediaWorks.Add(newBook);
         await _context.SaveChangesAsync();
@@ -75,15 +97,12 @@ public sealed class AddMediaScreen
 
     private async Task PickBookSourceAsync()
     {
-        var choices = new List<string>();
-
-        if (_ttsuBooks.Count > 0)
+        var choices = new List<string>
         {
-            choices.Add(TtsuChoice);
-        }
-
-        choices.Add(JitenChoice);
-        choices.Add("Cancel");
+            TtsuChoice,
+            JitenChoice,
+            "Cancel"
+        };
 
         var choice = AnsiConsole.Prompt(
             new SelectionPrompt<string>()

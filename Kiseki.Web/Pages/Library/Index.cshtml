@@ -8,6 +8,11 @@
 }
 
 <div class="library-page">
+    @if (TempData["LibraryNotice"] is string libraryNotice)
+    {
+        <div class="library-notice" role="status">@libraryNotice</div>
+    }
+
     <header class="library-header">
         <div class="library-heading">
             <h1>Library</h1>
