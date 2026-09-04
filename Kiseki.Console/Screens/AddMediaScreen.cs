@@ -130,7 +130,7 @@ public sealed class AddMediaScreen
             return;
         }
 
-        var mediaWork = new MediaWork(selection.Title, mediaType: MediaType.Book);
+        var mediaWork = new MediaWork(selection.DisplayTitle, mediaType: MediaType.Book);
         selection.ApplyTo(mediaWork);
 
         _context.MediaWorks.Add(mediaWork);

@@ -1,5 +1,5 @@
-using Kiseki.Console.Models;
 using Kiseki.Core.DTOs;
+using Kiseki.Core.Models;
 using Kiseki.Core.Services;
 using Spectre.Console;
 
@@ -115,11 +115,7 @@ public sealed class JitenLinkScreen
             return null;
         }
 
-        var selection = new JitenMediaSelection(
-            selectedDeck.DeckId,
-            selectedSubdeck.DeckId,
-            GetTitle(selectedSubdeck),
-            selectedSubdeck.CharacterCount);
+        var selection = JitenMediaSelection.FromSubdeck(selectedDeck, selectedSubdeck);
 
         WriteSelection(selection);
         return selection;
@@ -158,11 +154,7 @@ public sealed class JitenLinkScreen
 
     private static JitenMediaSelection CreateDeckSelection(JitenDeckDTO deck)
     {
-        return new JitenMediaSelection(
-            deck.DeckId,
-            null,
-            GetTitle(deck),
-            deck.CharacterCount);
+        return JitenMediaSelection.FromDeck(deck);
     }
 
     private static string GetTitle(JitenDeckDTO deck)
@@ -189,7 +181,7 @@ public sealed class JitenLinkScreen
             .AddColumn("Field")
             .AddColumn("Value");
 
-        table.AddRow("Title", Markup.Escape(selection.Title));
+        table.AddRow("Title", Markup.Escape(selection.DisplayTitle));
         table.AddRow("Deck ID", selection.DeckId.ToString());
         table.AddRow("Subdeck ID", selection.SubdeckId?.ToString() ?? "—");
         table.AddRow(

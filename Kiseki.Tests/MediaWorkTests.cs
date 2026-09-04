@@ -9,11 +9,15 @@ public class MediaWorkTests
     {
         var work = new MediaWork("Aobuta volume 1");
 
-        work.LinkToJitenDeck(95367, 109_474);
+        work.LinkToJitenDeck(
+            95367,
+            109_474,
+            "https://cdn.jiten.moe/aobuta.jpg");
 
         Assert.Equal(95367, work.JitenDeckId);
         Assert.Null(work.JitenSubdeckId);
         Assert.Equal(109_474, work.TotalCharacters);
+        Assert.Equal("https://cdn.jiten.moe/aobuta.jpg", work.JitenCoverUrl);
         Assert.False(work.IsLinkedToJitenSubdeck);
     }
 
@@ -45,12 +49,26 @@ public class MediaWorkTests
     public void RemoveJitenLink_ClearsAllExternalValues()
     {
         var work = new MediaWork("Book");
-        work.LinkToJitenSubdeck(1, 2, 100_000);
+        work.LinkToJitenSubdeck(1, 2, 100_000, "https://cdn.jiten.moe/book.jpg");
 
         work.RemoveJitenLink();
 
         Assert.Null(work.JitenDeckId);
         Assert.Null(work.JitenSubdeckId);
         Assert.Null(work.JitenCharacterCount);
+        Assert.Null(work.JitenCoverUrl);
+    }
+
+    [Theory]
+    [InlineData("http://cdn.jiten.moe/book.jpg")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("nocover.jpg")]
+    public void LinkToJitenDeck_IgnoresUnsafeOrMissingCoverUrls(string coverUrl)
+    {
+        var work = new MediaWork("Book");
+
+        work.LinkToJitenDeck(1, 100_000, coverUrl);
+
+        Assert.Null(work.JitenCoverUrl);
     }
 }

@@ -2,6 +2,8 @@ namespace Kiseki.Core.Entities;
 
 public class MediaWork
 {
+    private const int MaxJitenCoverUrlLength = 2048;
+
     // Parameterless constructor for EF Core / Serialization
     protected MediaWork() { }
 
@@ -32,6 +34,7 @@ public class MediaWork
 
     public int? JitenDeckId { get; set; }
     public int? JitenSubdeckId { get; private set; }
+    public string? JitenCoverUrl { get; private set; }
 
     // Character Counts
     public int? JitenCharacterCount { get; set; }
@@ -48,19 +51,24 @@ public class MediaWork
 
     public List<ImmersionLog> Logs { get; set; } = new();
 
-    public void LinkToJitenDeck(int deckId, int characterCount)
+    public void LinkToJitenDeck(
+        int deckId,
+        int characterCount,
+        string? coverUrl = null)
     {
         ValidateJitenLinkValues(deckId, characterCount);
 
         JitenDeckId = deckId;
         JitenSubdeckId = null;
         JitenCharacterCount = characterCount;
+        JitenCoverUrl = NormalizeJitenCoverUrl(coverUrl);
     }
 
     public void LinkToJitenSubdeck(
         int parentDeckId,
         int subdeckId,
-        int characterCount)
+        int characterCount,
+        string? coverUrl = null)
     {
         ValidateJitenLinkValues(parentDeckId, characterCount);
 
@@ -73,6 +81,7 @@ public class MediaWork
         JitenDeckId = parentDeckId;
         JitenSubdeckId = subdeckId;
         JitenCharacterCount = characterCount;
+        JitenCoverUrl = NormalizeJitenCoverUrl(coverUrl);
     }
 
     public void RemoveJitenLink()
@@ -80,6 +89,7 @@ public class MediaWork
         JitenDeckId = null;
         JitenSubdeckId = null;
         JitenCharacterCount = null;
+        JitenCoverUrl = null;
     }
 
     private static void ValidateJitenLinkValues(int deckId, int characterCount)
@@ -95,6 +105,22 @@ public class MediaWork
             throw new ArgumentOutOfRangeException(
                 nameof(characterCount), "Character count cannot be negative.");
         }
+    }
+
+    private static string? NormalizeJitenCoverUrl(string? coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(coverUrl) ||
+            coverUrl.Trim().Equals("nocover.jpg", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var normalized = coverUrl.Trim();
+        return normalized.Length <= MaxJitenCoverUrlLength &&
+               Uri.TryCreate(normalized, UriKind.Absolute, out var uri) &&
+               uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            ? uri.AbsoluteUri
+            : null;
     }
 
     public int CurrentCharactersRead => Logs.Sum(l => l.CharactersRead);

@@ -54,13 +54,15 @@ public class JitenApiClientTests
 
         var httpClient = new HttpClient(handler);
         var client = new JitenApiClient(httpClient);
+        using var cancellationSource = new CancellationTokenSource();
 
-        var detail = await client.GetDeckDetailAsync(10);
+        var detail = await client.GetDeckDetailAsync(10, cancellationSource.Token);
 
         Assert.NotNull(detail);
         Assert.Equal(3, detail.SubDecks.Count);
         Assert.Equal([101, 102, 103], detail.SubDecks.Select(deck => deck.DeckId));
         Assert.Equal(2, handler.RequestCount);
+        Assert.All(handler.CancellationTokens, token => Assert.True(token.CanBeCanceled));
     }
 
     private sealed class StubHttpMessageHandler(
@@ -68,12 +70,14 @@ public class JitenApiClientTests
         : HttpMessageHandler
     {
         public int RequestCount { get; private set; }
+        public List<CancellationToken> CancellationTokens { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             RequestCount++;
+            CancellationTokens.Add(cancellationToken);
             return Task.FromResult(responder(request));
         }
     }

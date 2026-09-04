@@ -22,7 +22,9 @@ public sealed class JitenApiClient : IJitenApiClient
         _httpClient.BaseAddress ??= BaseAddress;
     }
 
-    public async Task<IReadOnlyList<JitenDeckDTO>> SearchBooksAsync(string query)
+    public async Task<IReadOnlyList<JitenDeckDTO>> SearchBooksAsync(
+        string query,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -30,7 +32,7 @@ public sealed class JitenApiClient : IJitenApiClient
         }
 
         var encodedQuery = Uri.EscapeDataString(query.Trim());
-        var firstPage = await GetSearchPageAsync(encodedQuery, 0);
+        var firstPage = await GetSearchPageAsync(encodedQuery, 0, cancellationToken);
 
         if (firstPage is null)
         {
@@ -44,7 +46,7 @@ public sealed class JitenApiClient : IJitenApiClient
 
         while (results.Count < firstPage.TotalItems && offset > 0)
         {
-            var nextPage = await GetSearchPageAsync(encodedQuery, offset);
+            var nextPage = await GetSearchPageAsync(encodedQuery, offset, cancellationToken);
 
             if (nextPage is null || nextPage.Data.Count == 0)
             {
@@ -60,14 +62,16 @@ public sealed class JitenApiClient : IJitenApiClient
         return results;
     }
 
-    public async Task<JitenDeckDetailDTO?> GetDeckDetailAsync(int deckId)
+    public async Task<JitenDeckDetailDTO?> GetDeckDetailAsync(
+        int deckId,
+        CancellationToken cancellationToken = default)
     {
         if (deckId <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(deckId));
         }
 
-        var firstPage = await GetDeckDetailPageAsync(deckId, 0);
+        var firstPage = await GetDeckDetailPageAsync(deckId, 0, cancellationToken);
 
         if (firstPage?.Data is null)
         {
@@ -81,7 +85,7 @@ public sealed class JitenApiClient : IJitenApiClient
 
         while (detail.SubDecks.Count < firstPage.TotalItems && offset > 0)
         {
-            var nextPage = await GetDeckDetailPageAsync(deckId, offset);
+            var nextPage = await GetDeckDetailPageAsync(deckId, offset, cancellationToken);
 
             if (nextPage?.Data is null || nextPage.Data.SubDecks.Count == 0)
             {
@@ -97,7 +101,9 @@ public sealed class JitenApiClient : IJitenApiClient
         return detail;
     }
 
-    public async Task<JitenFranchiseDTO?> GetFranchiseAsync(int deckId)
+    public async Task<JitenFranchiseDTO?> GetFranchiseAsync(
+        int deckId,
+        CancellationToken cancellationToken = default)
     {
         if (deckId <= 0)
         {
@@ -105,7 +111,8 @@ public sealed class JitenApiClient : IJitenApiClient
         }
 
         using var response = await _httpClient.GetAsync(
-            $"api/media-deck/{deckId}/franchise");
+            $"api/media-deck/{deckId}/franchise",
+            cancellationToken);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -113,15 +120,19 @@ public sealed class JitenApiClient : IJitenApiClient
         }
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<JitenFranchiseDTO>(JsonOptions);
+        return await response.Content.ReadFromJsonAsync<JitenFranchiseDTO>(
+            JsonOptions,
+            cancellationToken);
     }
 
     private async Task<JitenDeckDetailResponseDTO?> GetDeckDetailPageAsync(
         int deckId,
-        int offset)
+        int offset,
+        CancellationToken cancellationToken)
     {
         using var response = await _httpClient.GetAsync(
-            $"api/media-deck/{deckId}/detail?offset={offset}");
+            $"api/media-deck/{deckId}/detail?offset={offset}",
+            cancellationToken);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -129,12 +140,15 @@ public sealed class JitenApiClient : IJitenApiClient
         }
 
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<JitenDeckDetailResponseDTO>(JsonOptions);
+        return await response.Content.ReadFromJsonAsync<JitenDeckDetailResponseDTO>(
+            JsonOptions,
+            cancellationToken);
     }
 
     private Task<JitenResponseContainerDTO?> GetSearchPageAsync(
         string encodedQuery,
-        int offset)
+        int offset,
+        CancellationToken cancellationToken)
     {
         var endpoint =
             "api/media-deck/get-media-decks" +
@@ -142,6 +156,8 @@ public sealed class JitenApiClient : IJitenApiClient
             $"&titleFilter={encodedQuery}&sortOrder=0";
 
         return _httpClient.GetFromJsonAsync<JitenResponseContainerDTO>(
-            endpoint, JsonOptions);
+            endpoint,
+            JsonOptions,
+            cancellationToken);
     }
 }

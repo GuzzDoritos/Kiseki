@@ -60,6 +60,8 @@ namespace Kiseki.Core
             {
                 entity.Property(work => work.MediaType)
                     .HasDefaultValue(MediaType.Book);
+                entity.Property(work => work.JitenCoverUrl)
+                    .HasMaxLength(2048);
 
                 entity.HasIndex(work => work.MediaSeriesId);
                 entity.HasIndex(work => work.JitenDeckId);

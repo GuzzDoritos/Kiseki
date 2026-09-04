@@ -2,6 +2,7 @@
 
 using Kiseki.Core.DTOs;
 using Kiseki.Core.Entities;
+using Kiseki.Core.Models;
 
 public class MediaAggregator
 {
@@ -27,12 +28,15 @@ public class MediaAggregator
         var work = new MediaWork(bookTitle)
         {
             Title = bookTitle,
-            JitenDeckId = jitenDeck?.DeckId,
-            JitenCharacterCount = jitenDeck?.CharacterCount, // Null if book isn't on Jiten
             Logs = ttsuEntries
                 .Select(entry => entry.ToImmersionLog())
                 .ToList()
         };
+
+        if (jitenDeck is not null)
+        {
+            JitenMediaSelection.FromDeck(jitenDeck).ApplyTo(work);
+        }
 
         _works.Add(work);
         return work;

@@ -42,6 +42,7 @@ public class DatabaseMigrationTests
         Assert.Equal(MediaType.Book, migratedWork.MediaType);
         Assert.Equal(95367, migratedWork.JitenDeckId);
         Assert.Null(migratedWork.JitenSubdeckId);
+        Assert.Null(migratedWork.JitenCoverUrl);
         Assert.Null(migratedWork.MediaSeriesId);
         Assert.Equal(109_474, migratedWork.TotalCharacters);
     }
