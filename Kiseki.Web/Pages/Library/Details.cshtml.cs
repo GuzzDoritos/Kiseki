@@ -1,13 +1,31 @@
+using Kiseki.Core;
+using Kiseki.Web.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
 
 namespace Kiseki.Web.Pages.Library;
 
-public class DetailsModel : PageModel
+public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
 {
-    public Guid Id { get; private set; }
+    public MediaWorkDetailsViewModel Work { get; private set; } = null!;
 
-    public void OnGet(Guid id)
+    public async Task<IActionResult> OnGetAsync(
+        Guid id,
+        CancellationToken cancellationToken)
     {
-        Id = id;
+        var work = await dbContext.MediaWorks
+            .AsNoTracking()
+            .Include(item => item.MediaSeries)
+            .Include(item => item.Logs)
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+        if (work is null)
+        {
+            return NotFound();
+        }
+
+        Work = MediaWorkDetailsViewModel.Create(work);
+        return Page();
     }
 }

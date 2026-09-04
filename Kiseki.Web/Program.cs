@@ -13,7 +13,8 @@ builder.Services.AddRazorPages();
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<ImmersionDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
-builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>();
+builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
+    client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddSingleton<TtsuDataLoader>();
 builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
 

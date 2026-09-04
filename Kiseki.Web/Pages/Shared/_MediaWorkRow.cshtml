@@ -13,8 +13,19 @@
 
 <article class="media-row">
     <a class="media-row-link" asp-page="/Library/Details" asp-route-id="@Model.Id">
-        <span class="media-cover media-cover-@Model.MediaType.ToString().ToLowerInvariant()" aria-hidden="true">
-            <span>@Model.TypeToJapanese</span>
+        <span class="media-cover media-cover-@Model.MediaType.ToString().ToLowerInvariant() @(Model.CoverUrl is not null ? "has-image" : string.Empty)"
+              aria-hidden="true"
+              data-cover-frame>
+            @if (Model.CoverUrl is not null)
+            {
+                <img class="media-cover-image"
+                     src="@Model.CoverUrl"
+                     alt=""
+                     loading="lazy"
+                     referrerpolicy="no-referrer"
+                     data-cover-image />
+            }
+            <span data-cover-fallback hidden="@(Model.CoverUrl is not null ? "hidden" : null)">@Model.TypeToJapanese</span>
         </span>
 
         <div class="media-copy">

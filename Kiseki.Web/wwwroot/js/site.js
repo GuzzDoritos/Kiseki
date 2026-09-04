@@ -33,3 +33,20 @@ if (ttsuFolderInput) {
         }
     });
 }
+
+document.querySelectorAll("[data-cover-image]").forEach(image => {
+    const showFallback = () => {
+        const frame = image.closest("[data-cover-frame]");
+        const fallback = frame?.querySelector("[data-cover-fallback]");
+
+        image.hidden = true;
+        frame?.classList.remove("has-image");
+        fallback?.removeAttribute("hidden");
+    };
+
+    image.addEventListener("error", showFallback, { once: true });
+
+    if (image.complete && image.naturalWidth === 0) {
+        showFallback();
+    }
+});

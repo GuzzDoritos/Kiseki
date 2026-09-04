@@ -9,6 +9,7 @@ public sealed record MediaWorkListItemViewModel(
     MediaType MediaType,
     int CharactersRead,
     int TotalCharacters,
+    string? CoverUrl,
     bool IsJitenLinked,
     bool IsCompleted,
     int SessionCount)

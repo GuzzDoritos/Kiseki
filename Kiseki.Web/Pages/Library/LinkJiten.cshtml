@@ -1,0 +1,205 @@
+@page "{id:guid}"
+@model Kiseki.Web.Pages.Library.LinkJitenModel
+@{
+    ViewData["Title"] = Model.HasExistingLink ? "Change Jiten link" : "Link to Jiten";
+}
+
+<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+    <a asp-page="/Library/Index">Library</a>
+    <span>/</span>
+    <a asp-page="/Library/Details" asp-route-id="@Model.WorkId">@Model.WorkTitle</a>
+    <span>/</span>
+    <span>@ViewData["Title"]</span>
+</nav>
+
+<div class="page-header compact">
+    <div>
+        <p class="eyebrow">Jiten metadata</p>
+        <h1>@ViewData["Title"]</h1>
+        <p class="page-description">
+            Search for <strong>@Model.WorkTitle</strong>, then link the complete deck or a specific subdeck.
+        </p>
+    </div>
+</div>
+
+<div asp-validation-summary="All" class="import-validation" role="alert"></div>
+
+@if (Model.WorkMediaType == MediaType.Book)
+{
+    <section class="content-card jiten-search-card">
+        <form method="get"
+              asp-page-handler="Search"
+              asp-route-id="@Model.WorkId"
+              class="search-form jiten-search-form">
+            <label class="visually-hidden" asp-for="Query">Book title</label>
+            <input class="form-control form-control-lg"
+                   asp-for="Query"
+                   type="search"
+                   autocomplete="off"
+                   placeholder="Japanese, romaji, or English title" />
+            <button class="btn btn-primary" type="submit">Search Jiten</button>
+        </form>
+    </section>
+}
+
+@if (Model.Results.Count > 0)
+{
+    <section class="jiten-results" aria-labelledby="jiten-results-title">
+        <div class="section-heading jiten-results-heading">
+            <div>
+                <p class="eyebrow">Search results</p>
+                <h2 id="jiten-results-title">@Model.Results.Count matching @(Model.Results.Count == 1 ? "deck" : "decks")</h2>
+            </div>
+            <span>Nothing is saved until you link a result</span>
+        </div>
+
+        <div class="jiten-result-list">
+            @foreach (var result in Model.Results)
+            {
+                <article class="content-card jiten-result-card">
+                    <div class="jiten-cover @(result.CoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                        @if (result.CoverUrl is not null)
+                        {
+                            <img src="@result.CoverUrl"
+                                 alt="Cover for @result.DisplayTitle"
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 data-cover-image />
+                        }
+                        <span data-cover-fallback hidden="@(result.CoverUrl is not null ? "hidden" : null)">本</span>
+                    </div>
+
+                    <div class="jiten-result-copy">
+                        <h3>@result.DisplayTitle</h3>
+                        @if (!string.IsNullOrWhiteSpace(result.EnglishTitle) && result.EnglishTitle != result.DisplayTitle)
+                        {
+                            <p>@result.EnglishTitle</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(result.RomajiTitle) && result.RomajiTitle != result.DisplayTitle)
+                        {
+                            <p>@result.RomajiTitle</p>
+                        }
+                        <div class="jiten-result-meta">
+                            <span>Deck @result.DeckId</span>
+                            <span>@result.CharacterCount.ToString("N0") characters</span>
+                            @if (result.ChildrenDeckCount > 0)
+                            {
+                                <span>@result.ChildrenDeckCount subdecks</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="jiten-result-actions">
+                        <form method="post" asp-page-handler="Link" asp-route-id="@Model.WorkId">
+                            <input type="hidden" name="Input.ParentDeckId" value="@result.DeckId" />
+                            <label for="title-@result.DeckId">Title after linking</label>
+                            <select class="form-select" id="title-@result.DeckId" name="Input.TitleChoice">
+                                <option value="KeepCurrent">Keep “@Model.WorkTitle”</option>
+                                @if (!string.IsNullOrWhiteSpace(result.OriginalTitle))
+                                {
+                                    <option value="Original">Use original title</option>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(result.EnglishTitle))
+                                {
+                                    <option value="English">Use English title</option>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(result.RomajiTitle))
+                                {
+                                    <option value="Romaji">Use romaji title</option>
+                                }
+                            </select>
+                            <button class="btn btn-primary" type="submit">
+                                @(Model.HasExistingLink ? "Replace with this deck" : "Link entire deck")
+                            </button>
+                        </form>
+                        @if (result.ChildrenDeckCount > 0)
+                        {
+                            <a class="btn btn-outline-secondary"
+                               asp-page-handler="Subdecks"
+                               asp-route-id="@Model.WorkId"
+                               asp-route-deck-id="@result.DeckId"
+                               asp-route-query="@Model.Query">Choose a subdeck</a>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    </section>
+}
+
+@if (Model.SelectedParent is not null)
+{
+    <section class="jiten-results" aria-labelledby="jiten-subdecks-title">
+        <div class="section-heading jiten-results-heading">
+            <div>
+                <p class="eyebrow">@Model.SelectedParent.DisplayTitle</p>
+                <h2 id="jiten-subdecks-title">Choose a subdeck</h2>
+            </div>
+            <a class="btn btn-link"
+               asp-page-handler="Search"
+               asp-route-id="@Model.WorkId"
+               asp-route-query="@Model.Query">Back to results</a>
+        </div>
+
+        <div class="jiten-result-list">
+            @foreach (var subdeck in Model.Subdecks)
+            {
+                <article class="content-card jiten-result-card jiten-subdeck-card">
+                    <div class="jiten-cover @(subdeck.CoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                        @if (subdeck.CoverUrl is not null)
+                        {
+                            <img src="@subdeck.CoverUrl"
+                                 alt="Cover for @subdeck.DisplayTitle"
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 data-cover-image />
+                        }
+                        <span data-cover-fallback hidden="@(subdeck.CoverUrl is not null ? "hidden" : null)">本</span>
+                    </div>
+
+                    <div class="jiten-result-copy">
+                        <h3>@subdeck.DisplayTitle</h3>
+                        @if (!string.IsNullOrWhiteSpace(subdeck.EnglishTitle) && subdeck.EnglishTitle != subdeck.DisplayTitle)
+                        {
+                            <p>@subdeck.EnglishTitle</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(subdeck.RomajiTitle) && subdeck.RomajiTitle != subdeck.DisplayTitle)
+                        {
+                            <p>@subdeck.RomajiTitle</p>
+                        }
+                        <div class="jiten-result-meta">
+                            <span>Subdeck @subdeck.SubdeckId</span>
+                            <span>@subdeck.CharacterCount.ToString("N0") characters</span>
+                        </div>
+                    </div>
+
+                    <div class="jiten-result-actions">
+                        <form method="post" asp-page-handler="Link" asp-route-id="@Model.WorkId">
+                            <input type="hidden" name="Input.ParentDeckId" value="@subdeck.DeckId" />
+                            <input type="hidden" name="Input.SubdeckId" value="@subdeck.SubdeckId" />
+                            <label for="title-@subdeck.SubdeckId">Title after linking</label>
+                            <select class="form-select" id="title-@subdeck.SubdeckId" name="Input.TitleChoice">
+                                <option value="KeepCurrent">Keep “@Model.WorkTitle”</option>
+                                @if (!string.IsNullOrWhiteSpace(subdeck.OriginalTitle))
+                                {
+                                    <option value="Original">Use original title</option>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(subdeck.EnglishTitle))
+                                {
+                                    <option value="English">Use English title</option>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(subdeck.RomajiTitle))
+                                {
+                                    <option value="Romaji">Use romaji title</option>
+                                }
+                            </select>
+                            <button class="btn btn-primary" type="submit">
+                                @(Model.HasExistingLink ? "Replace with this subdeck" : "Link this subdeck")
+                            </button>
+                        </form>
+                    </div>
+                </article>
+            }
+        </div>
+    </section>
+}

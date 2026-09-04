@@ -69,6 +69,7 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
                 work.MediaType,
                 work.CurrentCharactersRead,
                 work.TotalCharacters,
+                work.JitenCoverUrl,
                 work.HasJitenLink,
                 work.IsCompleted,
                 work.Logs.Count))

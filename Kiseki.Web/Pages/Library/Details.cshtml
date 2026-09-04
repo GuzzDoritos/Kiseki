@@ -1,45 +1,139 @@
 @page "{id:guid}"
 @model Kiseki.Web.Pages.Library.DetailsModel
 @{
-    ViewData["Title"] = "Work details";
-    var emptyProgress = new ProgressBarViewModel(0, 0, "No character total yet");
+    ViewData["Title"] = Model.Work.Title;
+    var progressLabel = Model.Work.TotalCharacters > 0
+        ? $"{Model.Work.CharactersRead:N0} / {Model.Work.TotalCharacters:N0} characters"
+        : $"{Model.Work.CharactersRead:N0} characters read";
+    var progress = new ProgressBarViewModel(
+        Model.Work.CharactersRead,
+        Model.Work.TotalCharacters,
+        progressLabel,
+        Model.Work.IsCompleted,
+        Model.Work.TotalCharacters > 0 || Model.Work.IsCompleted);
 }
 
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
     <a asp-page="/Library/Index">Library</a>
     <span>/</span>
-    <span>Work details</span>
+    <span>@Model.Work.Title</span>
 </nav>
+
+@if (TempData["LibraryNotice"] is string libraryNotice)
+{
+    <div class="page-notice" role="status">@libraryNotice</div>
+}
 
 <div class="page-header">
     <div>
-        <span class="media-badge media-badge-book">Book</span>
-        <h1>Media work</h1>
-        <p class="page-description">Work ID: @Model.Id</p>
+        <span class="media-badge">@Model.Work.MediaType</span>
+        <h1>@Model.Work.Title</h1>
+        <p class="page-description">@Model.Work.StatusLabel</p>
     </div>
-    <a class="btn btn-outline-secondary" asp-page="/Library/Edit" asp-route-id="@Model.Id">Edit</a>
+    <div class="page-actions">
+        @if (Model.Work.MediaType == MediaType.Book)
+        {
+            <a class="btn btn-primary"
+               asp-page="/Library/LinkJiten"
+               asp-route-id="@Model.Work.Id">
+                @(Model.Work.HasJitenLink ? "Change Jiten link" : "Link to Jiten")
+            </a>
+        }
+        <a class="btn btn-outline-secondary"
+           asp-page="/Library/Edit"
+           asp-route-id="@Model.Work.Id">Edit</a>
+    </div>
 </div>
 
 <div class="detail-grid">
     <section class="content-card detail-primary">
-        <p class="eyebrow">Progress</p>
-        <h2>Reading progress</h2>
-        <partial name="_ProgressBar" model="emptyProgress" />
+        <div class="detail-overview">
+            <div class="detail-cover @(Model.Work.JitenCoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                @if (Model.Work.JitenCoverUrl is not null)
+                {
+                    <img src="@Model.Work.JitenCoverUrl"
+                         alt="Cover for @Model.Work.Title"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         data-cover-image />
+                }
+                <span data-cover-fallback hidden="@(Model.Work.JitenCoverUrl is not null ? "hidden" : null)">@Model.Work.MediaType</span>
+            </div>
+
+            <div class="detail-progress">
+                <p class="eyebrow">Progress</p>
+                <h2>Immersion progress</h2>
+                <partial name="_ProgressBar" model="progress" />
+
+                <dl class="detail-stat-grid">
+                    <div><dt>Characters read</dt><dd>@Model.Work.CharactersRead.ToString("N0")</dd></div>
+                    <div><dt>Character total</dt><dd>@(Model.Work.TotalCharacters > 0 ? Model.Work.TotalCharacters.ToString("N0") : "Not set")</dd></div>
+                    <div><dt>Sessions</dt><dd>@Model.Work.SessionCount.ToString("N0")</dd></div>
+                    <div><dt>Reading time</dt><dd>@Model.Work.TotalTimeLabel</dd></div>
+                </dl>
+            </div>
+        </div>
     </section>
 
     <aside class="content-card detail-aside">
-        <p class="eyebrow">Organization</p>
+        <p class="eyebrow">Metadata</p>
         <dl class="metadata-list">
-            <div><dt>Series</dt><dd>Unassigned</dd></div>
-            <div><dt>Jiten</dt><dd>Not linked</dd></div>
-            <div><dt>Status</dt><dd>In progress</dd></div>
+            <div><dt>Series</dt><dd>@(Model.Work.SeriesTitle ?? "Unassigned")</dd></div>
+            <div><dt>Jiten</dt><dd>@Model.Work.JitenLinkLabel</dd></div>
+            @if (Model.Work.JitenCharacterCount is int jitenCharacters)
+            {
+                <div><dt>Jiten characters</dt><dd>@jitenCharacters.ToString("N0")</dd></div>
+            }
+            @if (Model.Work.ManualCharacterCountOverride is int manualCharacters)
+            {
+                <div><dt>Manual total</dt><dd>@manualCharacters.ToString("N0")</dd></div>
+            }
+            <div><dt>Total source</dt><dd>@Model.Work.CharacterTotalSource</dd></div>
+            <div><dt>Status</dt><dd>@Model.Work.StatusLabel</dd></div>
         </dl>
     </aside>
 </div>
 
 <section class="content-card section-block">
     <div class="section-heading">
-        <div><p class="eyebrow">History</p><h2>Immersion sessions</h2></div>
+        <div>
+            <p class="eyebrow">History</p>
+            <h2>Immersion sessions</h2>
+        </div>
+        @if (Model.Work.Logs.Count > 0)
+        {
+            <span class="section-summary">@Model.Work.SessionCount sessions · @Model.Work.TotalTimeLabel</span>
+        }
     </div>
-    <div class="inline-empty">Session history will appear here after Core is connected.</div>
+
+    @if (Model.Work.Logs.Count == 0)
+    {
+        <div class="inline-empty">No immersion sessions have been recorded for this work.</div>
+    }
+    else
+    {
+        <div class="immersion-log-table-wrap">
+            <table class="immersion-log-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Characters</th>
+                        <th>Time</th>
+                        <th>Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in Model.Work.Logs)
+                    {
+                        <tr>
+                            <td><time datetime="@log.Date.ToString("yyyy-MM-dd")">@log.Date.ToString("MMM d, yyyy")</time></td>
+                            <td>@log.CharactersRead.ToString("N0")</td>
+                            <td>@log.TimeSpentLabel</td>
+                            <td><span class="source-tag"><i></i>@log.SourceLabel</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
 </section>
