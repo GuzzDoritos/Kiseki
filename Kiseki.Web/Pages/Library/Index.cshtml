@@ -1,0 +1,104 @@
+@page
+@model Kiseki.Web.Pages.Library.IndexModel
+@{
+    ViewData["Title"] = "Library";
+    ViewData["MainClass"] = "app-main--flush";
+
+    string TypeTabClass(MediaType? type) => Model.Type == type ? "active" : string.Empty;
+}
+
+<div class="library-page">
+    <header class="library-header">
+        <div class="library-heading">
+            <h1>Library</h1>
+            <span>@Model.TotalCount @(Model.TotalCount == 1 ? "work" : "works")</span>
+        </div>
+
+        <div class="library-header-actions">
+            <form class="library-search" method="get" role="search">
+                @if (Model.Type is not null)
+                {
+                    <input type="hidden" name="Type" value="@Model.Type" />
+                }
+                @if (Model.Status is not null)
+                {
+                    <input type="hidden" name="Status" value="@Model.Status" />
+                }
+                <label class="visually-hidden" for="library-search">Search library</label>
+                <svg aria-hidden="true" viewBox="0 0 16 16">
+                    <circle cx="7" cy="7" r="4.5"></circle>
+                    <path d="m10.5 10.5 3 3"></path>
+                </svg>
+                <input id="library-search" name="Search" type="search" value="@Model.Search" placeholder="Search library" />
+            </form>
+            <a class="primary-action" asp-page="/Import/Index">
+                <span aria-hidden="true">+</span>
+                Add media
+            </a>
+        </div>
+    </header>
+
+    <div class="library-filters">
+        <nav class="filter-tabs" aria-label="Filter by media type">
+            <a class="filter-tab @TypeTabClass(null)"
+               asp-page="/Library/Index"
+               asp-route-search="@Model.Search"
+               asp-route-status="@Model.Status">All</a>
+            @foreach (var type in Enum.GetValues<MediaType>())
+            {
+                <a class="filter-tab @TypeTabClass(type)"
+                   asp-page="/Library/Index"
+                   asp-route-search="@Model.Search"
+                   asp-route-status="@Model.Status"
+                   asp-route-type="@type">@(type == MediaType.Book ? "Books" : type.ToString())</a>
+            }
+        </nav>
+
+        <form class="status-filter" method="get">
+            @if (Model.Type is not null)
+            {
+                <input type="hidden" name="Type" value="@Model.Type" />
+            }
+            @if (Model.Search is not null)
+            {
+                <input type="hidden" name="Search" value="@Model.Search" />
+            }
+            <label class="visually-hidden" for="library-status">Filter by status</label>
+            <select id="library-status" name="Status" onchange="this.form.submit()">
+                <option value="" selected="@(Model.Status is null)">All statuses</option>
+                <option value="in-progress" selected="@(Model.Status == "in-progress")">In progress</option>
+                <option value="not-started" selected="@(Model.Status == "not-started")">Not started</option>
+                <option value="completed" selected="@(Model.Status == "completed")">Completed</option>
+            </select>
+        </form>
+    </div>
+
+    <section class="library-results" aria-label="Library results">
+        @if (Model.Works.Count > 0)
+        {
+            <div class="media-list">
+                @foreach (var work in Model.Works)
+                {
+                    <partial name="_MediaWorkRow" model="work" />
+                }
+            </div>
+        }
+        else
+        {
+            <div class="library-empty">
+                @if (Model.TotalCount == 0)
+                {
+                    <h2>Your library is empty</h2>
+                    <p>Add a work to start tracking your immersion progress.</p>
+                    <a class="secondary-action" asp-page="/Import/Index">Add your first work</a>
+                }
+                else
+                {
+                    <h2>No matching works</h2>
+                    <p>Nothing in your library matches these filters.</p>
+                    <a class="secondary-action" asp-page="/Library/Index">Clear filters</a>
+                }
+            </div>
+        }
+    </section>
+</div>

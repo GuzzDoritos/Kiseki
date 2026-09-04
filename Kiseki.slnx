@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Kiseki.Console/Kiseki.Console.csproj" />
+  <Project Path="Kiseki.Core/Kiseki.Core.csproj" />
+  <Project Path="Kiseki.Tests/Kiseki.Tests.csproj" />
+  <Project Path="Kiseki.Web/Kiseki.Web.csproj" />
+</Solution>

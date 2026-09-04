@@ -1,0 +1,28 @@
+@page
+@model Kiseki.Web.Pages.Series.IndexModel
+@{
+    ViewData["Title"] = "Series";
+}
+
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Organization</p>
+        <h1>Series</h1>
+        <p class="page-description">Group related works while keeping books, anime, and games distinct.</p>
+    </div>
+    <a class="btn btn-primary" asp-page="/Series/Create">Create series</a>
+</div>
+
+<div class="filter-tabs page-tabs" role="group" aria-label="Media type">
+    <button type="button" class="filter-tab active">All</button>
+    <button type="button" class="filter-tab">Books</button>
+    <button type="button" class="filter-tab">Anime</button>
+    <button type="button" class="filter-tab">Games</button>
+</div>
+
+<section class="content-card empty-state">
+    <div class="empty-icon">▦</div>
+    <h2>No series to show yet</h2>
+    <p>Series created in Core will eventually appear here with aggregate completion and work counts.</p>
+    <a class="btn btn-primary" asp-page="/Series/Create">Create your first series</a>
+</section>

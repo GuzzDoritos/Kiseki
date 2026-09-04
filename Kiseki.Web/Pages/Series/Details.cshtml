@@ -1,0 +1,26 @@
+@page "{id:guid}"
+@model Kiseki.Web.Pages.Series.DetailsModel
+@{
+    ViewData["Title"] = "Series details";
+}
+
+<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+    <a asp-page="/Series/Index">Series</a><span>/</span><span>Series details</span>
+</nav>
+
+<div class="page-header">
+    <div>
+        <span class="media-badge media-badge-book">Book series</span>
+        <h1>Media series</h1>
+        <p class="page-description">Series ID: @Model.Id</p>
+    </div>
+    <a class="btn btn-outline-secondary" asp-page="/Series/Edit" asp-route-id="@Model.Id">Edit series</a>
+</div>
+
+<section class="content-card section-block">
+    <div class="section-heading">
+        <div><p class="eyebrow">Works</p><h2>Entries in this series</h2></div>
+        <a class="btn btn-sm btn-outline-secondary" asp-page="/Library/Index">Open library</a>
+    </div>
+    <div class="inline-empty">Assigned volumes or entries will be listed here in series order.</div>
+</section>
