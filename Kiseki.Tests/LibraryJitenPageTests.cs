@@ -103,6 +103,29 @@ public sealed class LibraryJitenPageTests
     }
 
     [Fact]
+    public async Task Subdecks_LoadsTheSelectedParentDeck()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Local title");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var client = new StubJitenApiClient { Detail = BookDetail() };
+        var model = CreateLinkModel(database.Context, client);
+
+        var result = await model.OnGetSubdecksAsync(
+            work.Id,
+            deckId: 10,
+            cancellationToken: CancellationToken.None);
+
+        Assert.IsType<PageResult>(result);
+        Assert.Equal(10, client.LastDetailDeckId);
+        Assert.Equal(10, model.SelectedParent?.DeckId);
+        Assert.Equal(11, Assert.Single(model.Subdecks).SubdeckId);
+        Assert.True(model.ModelState.IsValid);
+    }
+
+    [Fact]
     public async Task Details_LoadsMetadataAndOrdersImmersionLogsNewestFirst()
     {
         await using var database = await TestDatabase.CreateAsync();
