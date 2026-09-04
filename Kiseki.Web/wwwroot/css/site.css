@@ -12,7 +12,7 @@
   --color-edge-subtle: #1b1b20;
   --color-ink: #e1e1e8;
   --color-ink-2: #c5c5d1;
-  --color-ink-3: #4d4d58;
+  --color-ink-3: #a89898;
   --color-accent: #ff1100;
   --color-accent-glow: rgba(139, 140, 245, .08);
   --color-accent-subtle: rgba(139, 140, 245, .18);
@@ -383,6 +383,7 @@ table,
 
 .filter-tab {
   padding: 6px 10px;
+  border: none;
   border-radius: 6px;
   color: var(--color-ink-2);
   font-size: 12px;
