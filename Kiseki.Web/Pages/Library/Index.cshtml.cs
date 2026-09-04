@@ -51,8 +51,8 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
         query = Status switch
         {
             "completed" => query.Where(work => work.IsCompleted),
-            "in-progress" => query.Where(work => !work.IsCompleted && work.Logs.Any()),
-            "not-started" => query.Where(work => !work.IsCompleted && !work.Logs.Any()),
+            "in-progress" => query.Where(work => !work.IsCompleted && work.Logs.Any(log => log.CharactersRead > 0)),
+            "not-started" => query.Where(work => !work.IsCompleted && !work.Logs.Any(log => log.CharactersRead > 0)),
             _ => query
         };
 
