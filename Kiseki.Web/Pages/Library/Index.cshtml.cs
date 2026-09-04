@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Kiseki.Web.Models;
+using System.ComponentModel;
 
 namespace Kiseki.Web.Pages.Library;
 
@@ -20,6 +21,9 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
 
     [BindProperty(SupportsGet = true)]
     public string? Status { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? View { get; set; } = "list";
 
     public async Task OnGetAsync()
     {

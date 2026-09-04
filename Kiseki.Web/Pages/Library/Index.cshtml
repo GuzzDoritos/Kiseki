@@ -84,12 +84,15 @@
     <section class="library-results" aria-label="Library results">
         @if (Model.Works.Count > 0)
         {
-            <div class="media-list">
-                @foreach (var work in Model.Works)
-                {
-                    <partial name="_MediaWorkRow" model="work" />
-                }
-            </div>
+            @if (Model.View == "list") {
+                <div class="media-list">
+                    @foreach (var work in Model.Works)
+                    {
+                        <partial name="_MediaWorkRow" model="work" />
+                    }
+                </div>
+            }
+            
         }
         else
         {
