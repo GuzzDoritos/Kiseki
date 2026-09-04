@@ -50,7 +50,10 @@
                    asp-page="/Library/Index"
                    asp-route-search="@Model.Search"
                    asp-route-status="@Model.Status"
-                   asp-route-type="@type">@(type == MediaType.Book ? "Books" : type.ToString())</a>
+                   asp-route-type="@type">@(type == MediaType.Book ? "Books" 
+                                            : type == MediaType.Game ? "Games" 
+                                            : type.ToString())
+                </a>
             }
         </nav>
 
