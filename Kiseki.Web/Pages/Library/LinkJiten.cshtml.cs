@@ -40,8 +40,13 @@ public sealed class LinkJitenModel(
             return NotFound();
         }
 
-        Query = WorkTitle;
-        return Page();
+        if (string.IsNullOrWhiteSpace(Query))
+        {
+            Query = WorkTitle;
+            return Page();
+        }
+
+        return await SearchLoadedWorkAsync(cancellationToken);
     }
 
     public async Task<IActionResult> OnGetSearchAsync(
@@ -53,6 +58,12 @@ public sealed class LinkJitenModel(
             return NotFound();
         }
 
+        return await SearchLoadedWorkAsync(cancellationToken);
+    }
+
+    private async Task<IActionResult> SearchLoadedWorkAsync(
+        CancellationToken cancellationToken)
+    {
         if (!CanLinkWork())
         {
             return Page();

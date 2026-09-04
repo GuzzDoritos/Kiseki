@@ -79,7 +79,7 @@ public sealed class LibraryJitenPageTests
     }
 
     [Fact]
-    public async Task Search_PopulatesResultsWithoutChangingTheMediaWork()
+    public async Task Get_WithAQuerySearchesWithoutChangingTheMediaWork()
     {
         await using var database = await TestDatabase.CreateAsync();
         var work = new MediaWork("Local title");
@@ -93,7 +93,7 @@ public sealed class LibraryJitenPageTests
         var model = CreateLinkModel(database.Context, client);
         model.Query = "  volume 1  ";
 
-        var result = await model.OnGetSearchAsync(work.Id, CancellationToken.None);
+        var result = await model.OnGetAsync(work.Id, CancellationToken.None);
 
         Assert.IsType<PageResult>(result);
         Assert.Equal("volume 1", client.LastSearchQuery);

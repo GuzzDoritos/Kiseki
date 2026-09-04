@@ -28,7 +28,7 @@
 {
     <section class="content-card jiten-search-card">
         <form method="get"
-              asp-page-handler="Search"
+              asp-page="/Library/LinkJiten"
               asp-route-id="@Model.WorkId"
               class="search-form jiten-search-form">
             <label class="visually-hidden" asp-for="Query">Book title</label>
@@ -136,7 +136,7 @@
                 <h2 id="jiten-subdecks-title">Choose a subdeck</h2>
             </div>
             <a class="btn btn-link"
-               asp-page-handler="Search"
+               asp-page="/Library/LinkJiten"
                asp-route-id="@Model.WorkId"
                asp-route-query="@Model.Query">Back to results</a>
         </div>
