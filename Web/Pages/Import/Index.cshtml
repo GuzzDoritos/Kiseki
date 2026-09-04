@@ -6,7 +6,6 @@
 
 <div class="page-header">
     <div>
-        <p class="eyebrow">Add media</p>
         <h1>Import</h1>
         <p class="page-description">Choose where the work and its metadata should come from.</p>
     </div>
@@ -14,7 +13,9 @@
 
 <section class="choice-grid">
     <a class="choice-card" asp-page="/Import/Ttsu">
-        <span class="choice-icon">T</span>
+        <span class="choice-icon">
+            <img src="~/images/integrations/ttsu.png" alt="" />
+        </span>
         <div>
             <h2>Import from Ttsu</h2>
             <p>Bring in reading sessions first, then resolve series and Jiten metadata.</p>
@@ -23,7 +24,9 @@
     </a>
 
     <a class="choice-card" asp-page="/Import/Jiten">
-        <span class="choice-icon">J</span>
+        <span class="choice-icon">
+            <img src="~/images/integrations/jiten.svg" alt="" />
+        </span>
         <div>
             <h2>Search Jiten</h2>
             <p>Add a deck or individual subdeck without existing reading history.</p>
