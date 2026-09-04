@@ -29,7 +29,7 @@
                 <a class="mobile-brand" asp-page="/Index">Immersion Tracker</a>
             </header>
 
-            <main role="main" class="app-main">
+            <main role="main" class="app-main @ViewData["MainClass"]">
                 @RenderBody()
             </main>
         </div>

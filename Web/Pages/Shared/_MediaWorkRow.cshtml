@@ -1,15 +1,45 @@
 @model MediaWorkListItemViewModel
+@{
+    var progressLabel = Model.TotalCharacters > 0
+        ? $"{Model.CharactersRead:N0} / {Model.TotalCharacters:N0} ch"
+        : $"{Model.CharactersRead:N0} ch";
+    var progress = new ProgressBarViewModel(
+        Model.CharactersRead,
+        Model.TotalCharacters,
+        progressLabel,
+        Model.IsCompleted,
+        false);
+}
 
 <article class="media-row">
-    <div class="media-row-main">
-        <span class="media-badge media-badge-@Model.MediaType.ToString().ToLowerInvariant()">@Model.MediaType</span>
-        <div>
-            <a class="media-title" asp-page="/Library/Details" asp-route-id="@Model.Id">@Model.Title</a>
-            <div class="media-meta">@(Model.SeriesTitle ?? "Standalone")</div>
+    <a class="media-row-link" asp-page="/Library/Details" asp-route-id="@Model.Id">
+        <span class="media-cover media-cover-@Model.MediaType.ToString().ToLowerInvariant()" aria-hidden="true">
+            <span>@Model.TypeAbbreviation</span>
+        </span>
+
+        <div class="media-copy">
+            <span class="media-title">@Model.Title</span>
+            <span class="media-series">@(Model.SeriesTitle ?? "Standalone")</span>
+            <span class="media-tags">
+                <span class="media-type-tag">@Model.MediaType</span>
+                @if (Model.IsJitenLinked)
+                {
+                    <span class="source-tag"><i></i>Jiten</span>
+                }
+                @if (Model.SessionCount > 0)
+                {
+                    <span class="source-tag"><i></i>TTSU &times;@Model.SessionCount</span>
+                }
+            </span>
         </div>
-    </div>
-    <partial name="_ProgressBar" model="new ProgressBarViewModel(Model.CharactersRead, Model.TotalCharacters)" />
-    <div class="jiten-status @(Model.IsJitenLinked ? "linked" : string.Empty)">
-        @(Model.IsJitenLinked ? "Jiten linked" : "Not linked")
-    </div>
+
+        <div class="media-row-progress">
+            <partial name="_ProgressBar" model="progress" />
+        </div>
+
+        <span class="media-status media-status-@Model.StatusCssClass">
+            <i aria-hidden="true"></i>
+            @Model.StatusLabel
+        </span>
+    </a>
 </article>

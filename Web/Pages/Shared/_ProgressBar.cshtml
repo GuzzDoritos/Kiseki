@@ -3,9 +3,18 @@
 <div class="work-progress">
     <div class="progress-copy">
         <span>@(Model.Label ?? $"{Model.Current:N0} / {Model.Total:N0}")</span>
-        <span>@Model.Percentage.ToString("N1")%</span>
+        @if (Model.ShowPercentage)
+        {
+            <span class="progress-percentage">@Model.Percentage.ToString("N1")%</span>
+        }
     </div>
-    <div class="progress" role="progressbar" aria-label="Progress" aria-valuenow="@Model.Percentage" aria-valuemin="0" aria-valuemax="100">
-        <div class="progress-bar" style="width: @Model.Percentage.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+    <div class="progress-track"
+         role="progressbar"
+         aria-label="Progress"
+         aria-valuenow="@Model.Percentage.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)"
+         aria-valuemin="0"
+         aria-valuemax="100">
+        <div class="progress-fill @(Model.IsComplete ? "complete" : string.Empty)"
+             style="width: @Model.Percentage.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%"></div>
     </div>
 </div>
