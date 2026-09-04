@@ -31,7 +31,7 @@ public sealed record MediaWorkListItemViewModel(
             ? "active"
             : "not-started";
 
-    public string TypeAbbreviation => MediaType switch
+    public string TypeToJapanese => MediaType switch
     {
         MediaType.Book => "本",
         MediaType.Anime => "アニメ",
