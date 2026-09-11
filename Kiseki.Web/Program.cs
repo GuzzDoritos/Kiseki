@@ -44,10 +44,7 @@ if (provider is "postgres" or "postgresql" or "npgsql")
     builder.Services.AddDbContext<ImmersionDbContext>(options =>
         options.UseNpgsql(connectionString, npgsqlOptions =>
         {
-            npgsqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorCodesToAdd: null);
+            npgsqlOptions.ExecutionStrategy(deps => new Kiseki.Web.NeonRetryingExecutionStrategy(deps));
         }));
 }
 else if (provider == "sqlite")
