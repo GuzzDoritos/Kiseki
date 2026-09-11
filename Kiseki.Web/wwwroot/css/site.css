@@ -876,7 +876,11 @@ table,
   padding: 22px;
 }
 
-.detail-primary h2,
+.detail-primary h2 {
+  margin: 2px 0 18px;
+  font-size: 1.2rem;
+}
+
 .section-heading h2 {
   margin: 0 0 20px;
   font-size: 1.2rem;
@@ -944,7 +948,7 @@ table,
 
 .detail-stat-grid dd {
   margin: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--color-ink);
   font-size: 15px;
   font-variant-numeric: tabular-nums;
@@ -956,6 +960,210 @@ table,
   color: var(--color-ink-3);
   font-size: 10px;
   font-weight: 500;
+}
+
+/* =============================================================================
+   Status Toggle Badge
+   ============================================================================= */
+
+.page-status-wrap {
+  margin: 6px 0 0;
+}
+
+.status-toggle-badge {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 3px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
+  user-select: none;
+}
+
+.status-toggle-badge:hover {
+  background: var(--color-raised);
+  border-color: var(--color-edge-subtle);
+}
+
+.status-toggle-badge:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent-glow);
+  border-color: var(--color-accent);
+}
+
+.status-toggle-badge:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* =============================================================================
+   Inline Editing
+   ============================================================================= */
+
+.inline-edit-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.inline-edit-heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: -.035em;
+  line-height: 1.25;
+}
+
+.inline-edit-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.inline-edit-text {
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: rgba(197, 197, 209, 0.35);
+  text-underline-offset: 4px;
+  transition: text-decoration-color 0.15s ease;
+  overflow-wrap: anywhere;
+}
+
+.inline-edit-display:hover .inline-edit-text {
+  text-decoration-color: rgba(255, 255, 255, 0.7);
+}
+
+.inline-edit-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: #4f4f5a;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.inline-edit-display:hover .inline-edit-trigger,
+.inline-edit-trigger:hover,
+.inline-edit-trigger:focus-visible {
+  color: #ffffff;
+  outline: none;
+}
+
+.inline-edit-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.inline-edit-input {
+  background: transparent;
+  color: var(--color-ink);
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(255, 17, 0, 0.22);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.inline-edit-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(255, 17, 0, 0.35);
+}
+
+.inline-edit-input.has-error {
+  border-color: #ff4d4f;
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.4);
+  animation: inline-edit-shake 0.3s ease;
+}
+
+@keyframes inline-edit-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.title-inline-input {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: -.035em;
+  line-height: 1.25;
+  padding: 1px 8px;
+  width: 100%;
+  min-width: 220px;
+  max-width: 720px;
+}
+
+.stat-inline-wrapper {
+  margin: 0;
+}
+
+.stat-inline-input {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 6px;
+  width: 110px;
+  max-width: 100%;
+}
+
+.inline-edit-save-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border: none;
+  background: transparent;
+  color: var(--color-green);
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.inline-edit-save-btn:hover,
+.inline-edit-save-btn:focus-visible {
+  color: #5eed92;
+  transform: scale(1.1);
+  outline: none;
+}
+
+.inline-edit-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.inline-edit-error {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 10;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #ff7875;
+  background: #2a1215;
+  border: 1px solid rgba(255, 77, 79, 0.4);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.stat-inline-wrapper .inline-edit-error {
+  white-space: normal;
+  max-width: 180px;
 }
 
 .metadata-list {

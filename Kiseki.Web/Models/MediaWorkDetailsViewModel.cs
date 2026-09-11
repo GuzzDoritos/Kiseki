@@ -33,6 +33,12 @@ public sealed record MediaWorkDetailsViewModel(
             }
             : "Not started";
 
+    public string StatusCssClass => IsCompleted
+        ? "completed"
+        : CharactersRead > 0
+            ? "active"
+            : "idle";
+
     public string JitenLinkLabel => JitenDeckId switch
     {
         null => "Not linked",

@@ -16,8 +16,12 @@
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
     <a asp-page="/Library/Index">Library</a>
     <span>/</span>
-    <span>@Model.Work.Title</span>
+    <span data-breadcrumb-title>@Model.Work.Title</span>
 </nav>
+
+<form id="antiforgeryForm" method="post" class="d-none">
+    @Html.AntiForgeryToken()
+</form>
 
 @if (TempData["LibraryNotice"] is string libraryNotice)
 {
@@ -27,8 +31,46 @@
 <div class="page-header">
     <div>
         <span class="media-badge">@Model.Work.MediaType</span>
-        <h1>@Model.Work.Title</h1>
-        <p class="page-description">@Model.Work.StatusLabel</p>
+        <div class="inline-edit-wrapper title-edit-wrapper"
+             data-inline-edit="title"
+             data-url="@Url.Page("/Library/Details", "UpdateTitle", new { id = Model.Work.Id })">
+            <h1 class="inline-edit-heading">
+                <span class="inline-edit-display" data-inline-display>
+                    <span class="inline-edit-text" data-inline-text>@Model.Work.Title</span>
+                    <button type="button" class="inline-edit-trigger" data-inline-trigger aria-label="Edit title" title="Edit title">
+                        <svg class="inline-edit-pencil" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L4.75 13.25 2 14l.75-2.75L11.5 2.5z"></path>
+                        </svg>
+                    </button>
+                </span>
+                <span class="inline-edit-editor" data-inline-editor hidden>
+                    <input type="text"
+                           class="inline-edit-input title-inline-input"
+                           data-inline-input
+                           value="@Model.Work.Title"
+                           data-initial-value="@Model.Work.Title"
+                           maxlength="500"
+                           aria-label="Edit title" />
+                    <button type="button" class="inline-edit-save-btn" data-inline-save aria-label="Save title" title="Save">
+                        <svg class="inline-edit-check-icon" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="3.5 8.5 6.5 11.5 12.5 4.5"></polyline>
+                        </svg>
+                    </button>
+                </span>
+            </h1>
+            <div class="inline-edit-error" data-inline-error role="alert" aria-live="polite" hidden></div>
+        </div>
+        <div class="page-status-wrap">
+            <button type="button"
+                    class="media-status media-status-@Model.Work.StatusCssClass status-toggle-badge"
+                    data-status-toggle
+                    data-url="@Url.Page("/Library/Details", "ToggleStatus", new { id = Model.Work.Id })"
+                    title="Click to toggle status between Reading and Completed"
+                    aria-label="Status: @Model.Work.StatusLabel. Click to toggle.">
+                <i aria-hidden="true"></i>
+                <span data-status-text>@Model.Work.StatusLabel</span>
+            </button>
+        </div>
     </div>
     <div class="page-actions">
         @if (Model.Work.MediaType == MediaType.Book)
@@ -39,9 +81,6 @@
                 @(Model.Work.HasJitenLink ? "Change Jiten link" : "Link to Jiten")
             </a>
         }
-        <a class="btn btn-outline-secondary"
-           asp-page="/Library/Edit"
-           asp-route-id="@Model.Work.Id">Edit</a>
     </div>
 </div>
 
@@ -61,13 +100,42 @@
             </div>
 
             <div class="detail-progress">
-                <p class="eyebrow">Progress</p>
                 <h2>Immersion progress</h2>
                 <partial name="_ProgressBar" model="progress" />
 
                 <dl class="detail-stat-grid">
-                    <div><dt>Characters read</dt><dd>@Model.Work.CharactersRead.ToString("N0")</dd></div>
-                    <div><dt>Character total</dt><dd>@(Model.Work.TotalCharacters > 0 ? Model.Work.TotalCharacters.ToString("N0") : "Not set")</dd></div>
+                    <div><dt>Characters read</dt><dd data-characters-read="@Model.Work.CharactersRead">@Model.Work.CharactersRead.ToString("N0")</dd></div>
+                    <div>
+                        <dt>Character total</dt>
+                        <dd class="inline-edit-wrapper stat-inline-wrapper"
+                            data-inline-edit="characterTotal"
+                            data-url="@Url.Page("/Library/Details", "UpdateCharacterTotal", new { id = Model.Work.Id })">
+                            <span class="inline-edit-display" data-inline-display>
+                                <span class="inline-edit-text" data-inline-text>@(Model.Work.TotalCharacters > 0 ? Model.Work.TotalCharacters.ToString("N0") : "Not set")</span>
+                                <button type="button" class="inline-edit-trigger" data-inline-trigger aria-label="Edit character total" title="Edit character total">
+                                    <svg class="inline-edit-pencil" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L4.75 13.25 2 14l.75-2.75L11.5 2.5z"></path>
+                                    </svg>
+                                </button>
+                            </span>
+                            <span class="inline-edit-editor" data-inline-editor hidden>
+                                <input type="text"
+                                       inputmode="numeric"
+                                       class="inline-edit-input stat-inline-input"
+                                       data-inline-input
+                                       value="@(Model.Work.TotalCharacters > 0 ? Model.Work.TotalCharacters.ToString() : string.Empty)"
+                                       data-initial-value="@(Model.Work.TotalCharacters > 0 ? Model.Work.TotalCharacters.ToString() : string.Empty)"
+                                       placeholder="e.g. 150000"
+                                       aria-label="Edit character total" />
+                                <button type="button" class="inline-edit-save-btn" data-inline-save aria-label="Save character total" title="Save">
+                                    <svg class="inline-edit-check-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <polyline points="3.5 8.5 6.5 11.5 12.5 4.5"></polyline>
+                                    </svg>
+                                </button>
+                            </span>
+                            <span class="inline-edit-error" data-inline-error role="alert" aria-live="polite" hidden></span>
+                        </dd>
+                    </div>
                     <div><dt>Sessions</dt><dd>@Model.Work.SessionCount.ToString("N0")</dd></div>
                     <div><dt>Reading time</dt><dd>@Model.Work.TotalTimeLabel</dd></div>
                 </dl>
@@ -86,10 +154,10 @@
             }
             @if (Model.Work.ManualCharacterCountOverride is int manualCharacters)
             {
-                <div><dt>Manual total</dt><dd>@manualCharacters.ToString("N0")</dd></div>
+                <div data-metadata-manual-row><dt>Manual total</dt><dd data-metadata-manual-total>@manualCharacters.ToString("N0")</dd></div>
             }
-            <div><dt>Total source</dt><dd>@Model.Work.CharacterTotalSource</dd></div>
-            <div><dt>Status</dt><dd>@Model.Work.StatusLabel</dd></div>
+            <div><dt>Total source</dt><dd data-metadata-source>@Model.Work.CharacterTotalSource</dd></div>
+            <div><dt>Status</dt><dd data-metadata-status>@Model.Work.StatusLabel</dd></div>
         </dl>
     </aside>
 </div>

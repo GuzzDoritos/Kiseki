@@ -89,6 +89,10 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/");
     options.Conventions.AllowAnonymousToPage("/Login");
 });
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "RequestVerificationToken";
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
