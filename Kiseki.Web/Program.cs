@@ -195,16 +195,5 @@ static void LoadDotEnvFile()
 }
 
 static string NormalizePostgreSqlConnectionString(string connectionString)
-{
-    var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+    => Kiseki.Web.PostgreSqlConnectionStringNormalizer.Normalize(connectionString);
 
-    // Neon requires SSL. Enforce SslMode.Require on non-local hosts if SSL was not explicitly configured.
-    if (!string.Equals(csb.Host, "localhost", StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(csb.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
-        csb.SslMode == Npgsql.SslMode.Disable)
-    {
-        csb.SslMode = Npgsql.SslMode.Require;
-    }
-
-    return csb.ConnectionString;
-}
