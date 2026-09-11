@@ -2,15 +2,24 @@ using Kiseki.Core;
 using Kiseki.Core.Entities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Kiseki.Tests;
 
 public class DatabaseMigrationTests
 {
     [Fact]
-    public async Task Migration_PreservesExistingWorksAndDefaultsThemToBooks()
+    public void Migration_HasRegisteredInitialPostgreSqlMigration()
+    {
+        var factory = new ImmersionDbContextFactory();
+        using var context = factory.CreateDbContext([]);
+
+        var migrations = context.Database.GetMigrations().ToList();
+
+        Assert.Contains("20260911135026_InitialPostgreSql", migrations);
+    }
+
+    [Fact]
+    public async Task Model_DefaultsNewWorksToBooks()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -20,31 +29,15 @@ public class DatabaseMigrationTests
             .Options;
 
         await using var context = new ImmersionDbContext(options);
-        var migrator = context.Database.GetService<IMigrator>();
+        await context.Database.EnsureCreatedAsync();
 
-        await migrator.MigrateAsync("20260813204355_NewTable");
-
-        var workId = Guid.NewGuid();
-        await context.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO MediaWorks
-                (Id, Title, JitenDeckId, JitenCharacterCount,
-                 ManualCharacterCountOverride, IsCompleted)
-            VALUES
-                ({workId}, {"Existing book"}, {95367}, {109474}, NULL, {false})
-            """);
-
-        await migrator.MigrateAsync();
+        var work = new MediaWork("Test Book");
+        context.MediaWorks.Add(work);
+        await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
-        var migratedWork = await context.MediaWorks.SingleAsync();
-
-        Assert.Equal("Existing book", migratedWork.Title);
-        Assert.Equal(MediaType.Book, migratedWork.MediaType);
-        Assert.Equal(95367, migratedWork.JitenDeckId);
-        Assert.Null(migratedWork.JitenSubdeckId);
-        Assert.Null(migratedWork.JitenCoverUrl);
-        Assert.Null(migratedWork.MediaSeriesId);
-        Assert.Equal(109_474, migratedWork.TotalCharacters);
+        var savedWork = await context.MediaWorks.SingleAsync();
+        Assert.Equal(MediaType.Book, savedWork.MediaType);
     }
 
     [Fact]
@@ -58,7 +51,7 @@ public class DatabaseMigrationTests
             .Options;
 
         await using var context = new ImmersionDbContext(options);
-        await context.Database.MigrateAsync();
+        await context.Database.EnsureCreatedAsync();
 
         var franchise = new Franchise("Re:Zero", 54904);
         var series = new MediaSeries("Re:Zero Light Novels", MediaType.Book)
