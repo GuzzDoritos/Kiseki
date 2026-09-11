@@ -9,21 +9,74 @@ LoadDotEnvFile();
 
 var builder = WebApplication.CreateBuilder(args);
 
-var dbDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-if (!string.IsNullOrEmpty(dbDir))
+// Configure Database Provider (PostgreSQL for Render/Neon, SQLite for local development)
+var provider = builder.Configuration["DatabaseProvider"]?.Trim().ToLowerInvariant();
+
+if (string.IsNullOrEmpty(provider))
 {
-    Directory.CreateDirectory(dbDir);
+    // If not explicitly set: default to postgres in production or if DefaultConnection is set, otherwise sqlite
+    if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("DefaultConnection")) ||
+        !builder.Environment.IsDevelopment())
+    {
+        provider = "postgres";
+    }
+    else
+    {
+        provider = "sqlite";
+    }
 }
 
-var rawDbPath = Environment.GetEnvironmentVariable("KISEKI_DB_PATH");
-var databasePath = !string.IsNullOrEmpty(rawDbPath)
-    ? Environment.ExpandEnvironmentVariables(rawDbPath)
-    : Path.Join(dbDir, "kiseki.db");
-
-var dbParent = Path.GetDirectoryName(databasePath);
-if (!string.IsNullOrEmpty(dbParent))
+if (provider is "postgres" or "postgresql" or "npgsql")
 {
-    Directory.CreateDirectory(dbParent);
+    var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? builder.Configuration["DATABASE_URL"];
+
+    if (string.IsNullOrWhiteSpace(rawConnectionString))
+    {
+        throw new InvalidOperationException(
+            "PostgreSQL provider was selected, but connection string 'DefaultConnection' was not found. " +
+            "Please configure 'ConnectionStrings:DefaultConnection' in configuration or set the " +
+            "'ConnectionStrings__DefaultConnection' environment variable (e.g. from Neon).");
+    }
+
+    var connectionString = NormalizePostgreSqlConnectionString(rawConnectionString);
+
+    builder.Services.AddDbContext<ImmersionDbContext>(options =>
+        options.UseNpgsql(connectionString));
+}
+else if (provider == "sqlite")
+{
+    var rawDbPath = builder.Configuration["KISEKI_DB_PATH"]
+        ?? Environment.GetEnvironmentVariable("KISEKI_DB_PATH");
+
+    string sqlitePath;
+    if (!string.IsNullOrWhiteSpace(rawDbPath))
+    {
+        sqlitePath = Environment.ExpandEnvironmentVariables(rawDbPath);
+        if (!Path.IsPathRooted(sqlitePath))
+        {
+            sqlitePath = Path.GetFullPath(sqlitePath);
+        }
+    }
+    else
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        sqlitePath = Path.Join(localAppData, "kiseki.db");
+    }
+
+    var dbDirectory = Path.GetDirectoryName(sqlitePath);
+    if (!string.IsNullOrEmpty(dbDirectory))
+    {
+        Directory.CreateDirectory(dbDirectory);
+    }
+
+    builder.Services.AddDbContext<ImmersionDbContext>(options =>
+        options.UseSqlite($"Data Source={sqlitePath}"));
+}
+else
+{
+    throw new InvalidOperationException(
+        $"Unsupported DatabaseProvider: '{provider}'. Supported providers are 'sqlite' and 'postgres'.");
 }
 
 // Add services to the container.
@@ -33,8 +86,6 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Login");
 });
 builder.Services.AddMemoryCache();
-builder.Services.AddDbContext<ImmersionDbContext>(options =>
-    options.UseSqlite($"Data Source={databasePath}"));
 builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddSingleton<TtsuDataLoader>();
@@ -65,7 +116,20 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ImmersionDbContext>();
-    await context.Database.MigrateAsync();
+    if (context.Database.IsNpgsql())
+    {
+        // For PostgreSQL (Production / Neon):
+        // Run authoritative EF Core migrations
+        await context.Database.MigrateAsync();
+    }
+    else if (context.Database.IsSqlite())
+    {
+        // For local SQLite development:
+        // EnsureCreatedAsync provisions tables if the database does not exist,
+        // and does nothing if the database (and tables) already exist.
+        // It NEVER drops, deletes, or overwrites existing data or migrations history.
+        await context.Database.EnsureCreatedAsync();
+    }
 }
 
 app.UseForwardedHeaders();
@@ -128,4 +192,19 @@ static void LoadDotEnvFile()
             break;
         }
     }
+}
+
+static string NormalizePostgreSqlConnectionString(string connectionString)
+{
+    var csb = new Npgsql.NpgsqlConnectionStringBuilder(connectionString);
+
+    // Neon requires SSL. Enforce SslMode.Require on non-local hosts if SSL was not explicitly configured.
+    if (!string.Equals(csb.Host, "localhost", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(csb.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) &&
+        csb.SslMode == Npgsql.SslMode.Disable)
+    {
+        csb.SslMode = Npgsql.SslMode.Require;
+    }
+
+    return csb.ConnectionString;
 }
