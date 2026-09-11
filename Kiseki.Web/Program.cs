@@ -1,12 +1,25 @@
 using Kiseki.Core;
 using Kiseki.Core.Services;
 using Kiseki.Web.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-var databasePath = Path.Join(
-    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-    "kiseki.db");
+
+var dbDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+if (!string.IsNullOrEmpty(dbDir))
+{
+    Directory.CreateDirectory(dbDir);
+}
+
+var databasePath = Environment.GetEnvironmentVariable("KISEKI_DB_PATH")
+    ?? Path.Join(dbDir, "kiseki.db");
+
+var dbParent = Path.GetDirectoryName(databasePath);
+if (!string.IsNullOrEmpty(dbParent))
+{
+    Directory.CreateDirectory(dbParent);
+}
 
 // Add services to the container.
 builder.Services.AddRazorPages();
@@ -18,6 +31,13 @@ builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
 builder.Services.AddSingleton<TtsuDataLoader>();
 builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())
@@ -26,18 +46,17 @@ await using (var scope = app.Services.CreateAsyncScope())
     await context.Database.MigrateAsync();
 }
 
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-
 app.UseRouting();
-
 app.UseAuthorization();
 
 app.MapStaticAssets();
