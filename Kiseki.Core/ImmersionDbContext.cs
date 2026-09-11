@@ -1,4 +1,4 @@
-﻿using Kiseki.Core.Entities;
+using Kiseki.Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kiseki.Core
@@ -13,26 +13,28 @@ namespace Kiseki.Core
 
         public DbSet<ImmersionLog> ImmersionLogs { get; set; }
 
-        public string DbPath { get; }
+        public string DbPath => string.Empty;
 
         public ImmersionDbContext()
         {
-            var folder = Environment.SpecialFolder.LocalApplicationData;
-            var path = Environment.GetFolderPath(folder);
-            DbPath = Path.Join(path, "kiseki.db");
         }
 
         public ImmersionDbContext(DbContextOptions<ImmersionDbContext> options)
             : base(options)
         {
-            DbPath = string.Empty;
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder options)
         {
             if (!options.IsConfigured)
             {
-                options.UseSqlite($"Data Source={DbPath}");
+                var connStr = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+                    ?? Environment.GetEnvironmentVariable("DATABASE_URL");
+
+                if (!string.IsNullOrWhiteSpace(connStr))
+                {
+                    options.UseNpgsql(connStr);
+                }
             }
         }
 
@@ -74,7 +76,7 @@ namespace Kiseki.Core
 
                 entity.ToTable(table => table.HasCheckConstraint(
                     "CK_MediaWorks_JitenSubdeckRequiresDeck",
-                    "JitenSubdeckId IS NULL OR JitenDeckId IS NOT NULL"));
+                    "\"JitenSubdeckId\" IS NULL OR \"JitenDeckId\" IS NOT NULL"));
             });
         }
     }
