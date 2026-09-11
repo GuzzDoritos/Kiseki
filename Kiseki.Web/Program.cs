@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
+LoadDotEnvFile();
+
 var builder = WebApplication.CreateBuilder(args);
 
 var dbDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -13,8 +15,10 @@ if (!string.IsNullOrEmpty(dbDir))
     Directory.CreateDirectory(dbDir);
 }
 
-var databasePath = Environment.GetEnvironmentVariable("KISEKI_DB_PATH")
-    ?? Path.Join(dbDir, "kiseki.db");
+var rawDbPath = Environment.GetEnvironmentVariable("KISEKI_DB_PATH");
+var databasePath = !string.IsNullOrEmpty(rawDbPath)
+    ? Environment.ExpandEnvironmentVariables(rawDbPath)
+    : Path.Join(dbDir, "kiseki.db");
 
 var dbParent = Path.GetDirectoryName(databasePath);
 if (!string.IsNullOrEmpty(dbParent))
@@ -83,3 +87,45 @@ app.MapRazorPages()
    .WithStaticAssets();
 
 app.Run();
+
+static void LoadDotEnvFile()
+{
+    var current = Directory.GetCurrentDirectory();
+    string[] candidates = [
+        Path.Combine(current, ".env"),
+        Path.Combine(current, "..", ".env"),
+        Path.Combine(AppContext.BaseDirectory, ".env"),
+        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".env")
+    ];
+
+    foreach (var path in candidates)
+    {
+        var fullPath = Path.GetFullPath(path);
+        if (File.Exists(fullPath))
+        {
+            foreach (var line in File.ReadAllLines(fullPath))
+            {
+                var trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
+                    continue;
+
+                var idx = trimmed.IndexOf('=');
+                if (idx > 0)
+                {
+                    var key = trimmed[..idx].Trim();
+                    var val = trimmed[(idx + 1)..].Trim();
+                    if ((val.StartsWith('"') && val.EndsWith('"')) ||
+                        (val.StartsWith('\'') && val.EndsWith('\'')))
+                    {
+                        val = val[1..^1];
+                    }
+                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
+                    {
+                        Environment.SetEnvironmentVariable(key, val);
+                    }
+                }
+            }
+            break;
+        }
+    }
+}
