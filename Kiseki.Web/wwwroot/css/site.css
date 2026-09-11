@@ -1694,7 +1694,6 @@ table,
 .heatmap-body {
   position: relative;
   margin: 12px 0;
-  overflow: hidden;
 }
 
 .heatmap-scroll-container {
@@ -1852,8 +1851,8 @@ table,
 }
 
 .heatmap-tooltip {
-  position: absolute;
-  z-index: 1050;
+  position: fixed;
+  z-index: 9999;
   display: none;
   background: var(--color-overlay);
   color: var(--color-ink);
@@ -1862,7 +1861,7 @@ table,
   padding: 6px 10px;
   font-size: 0.75rem;
   line-height: 1.4;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   pointer-events: none;
   white-space: nowrap;
 }

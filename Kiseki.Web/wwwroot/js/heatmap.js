@@ -250,9 +250,40 @@
         const container = document.getElementById('heatmap-svg-container');
         if (!tooltip || !container) return;
 
+        let currentHoveredCell = null;
+
+        function updateTooltipPosition(cell) {
+            if (!cell) return;
+            const cellRect = cell.getBoundingClientRect();
+            const tooltipRect = tooltip.getBoundingClientRect();
+
+            let x = cellRect.left + cellRect.width / 2;
+            let y = cellRect.top - 8;
+            let flipBelow = false;
+
+            // If too close to viewport top, show below the cell
+            if (y - tooltipRect.height < 8) {
+                y = cellRect.bottom + 8;
+                flipBelow = true;
+            }
+
+            // Keep horizontally within viewport (12px padding)
+            const halfWidth = tooltipRect.width / 2;
+            if (x - halfWidth < 12) {
+                x = halfWidth + 12;
+            } else if (x + halfWidth > window.innerWidth - 12) {
+                x = window.innerWidth - halfWidth - 12;
+            }
+
+            tooltip.style.left = `${x}px`;
+            tooltip.style.top = `${y}px`;
+            tooltip.style.transform = flipBelow ? 'translate(-50%, 0)' : 'translate(-50%, -100%)';
+        }
+
         container.addEventListener('mouseover', (e) => {
             const cell = e.target.closest('.heatmap-cell');
             if (!cell) return;
+            currentHoveredCell = cell;
 
             const dateStr = cell.getAttribute('data-date');
             const count = parseInt(cell.getAttribute('data-count') || '0', 10);
@@ -262,30 +293,34 @@
 
             tooltip.innerHTML = `<strong>${formatted}</strong><br/>${count.toLocaleString()} characters`;
             tooltip.classList.add('is-visible');
-            positionTooltip(e);
-        });
-
-        container.addEventListener('mousemove', (e) => {
-            if (tooltip.classList.contains('is-visible')) {
-                positionTooltip(e);
-            }
+            updateTooltipPosition(cell);
         });
 
         container.addEventListener('mouseout', (e) => {
             if (e.target.closest('.heatmap-cell')) {
+                currentHoveredCell = null;
                 tooltip.classList.remove('is-visible');
             }
         });
 
-        function positionTooltip(e) {
-            const card = document.querySelector('.heatmap-card');
-            if (!card) return;
-            const cardRect = card.getBoundingClientRect();
-            const x = e.clientX - cardRect.left + 12;
-            const y = e.clientY - cardRect.top - 42;
-            tooltip.style.left = `${x}px`;
-            tooltip.style.top = `${y}px`;
+        const scrollContainer = document.getElementById('heatmap-scroll');
+        if (scrollContainer) {
+            scrollContainer.addEventListener('scroll', () => {
+                if (currentHoveredCell) {
+                    updateTooltipPosition(currentHoveredCell);
+                } else {
+                    tooltip.classList.remove('is-visible');
+                }
+            }, { passive: true });
         }
+
+        window.addEventListener('scroll', () => {
+            if (currentHoveredCell) {
+                updateTooltipPosition(currentHoveredCell);
+            } else {
+                tooltip.classList.remove('is-visible');
+            }
+        }, { passive: true });
     }
 
     document.addEventListener('DOMContentLoaded', () => {
