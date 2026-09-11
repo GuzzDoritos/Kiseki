@@ -1,0 +1,64 @@
+@model Kiseki.Web.Pages.IndexModel
+
+<section class="content-card heatmap-card" aria-label="Immersion activity heatmap">
+    <div class="heatmap-header">
+        <div class="heatmap-title-wrap">
+            <h2 class="heatmap-title">Immersion Activity</h2>
+            <p class="heatmap-subtitle">Daily reading volume based on characters read</p>
+        </div>
+
+        <div class="heatmap-toolbar">
+            <div class="heatmap-control-group">
+                <label for="heatmapYearSelect" class="heatmap-label">Period</label>
+                <select id="heatmapYearSelect" class="form-select form-select-sm heatmap-select" aria-label="Select heatmap period">
+                    <option value="all">All Time</option>
+                    @foreach (var year in Model.AvailableYears)
+                    {
+                        <option value="@year" selected="@(year == DateTime.Today.Year ? "selected" : null)">@year</option>
+                    }
+                </select>
+            </div>
+
+            <div class="heatmap-control-group">
+                <span class="heatmap-label">Select By</span>
+                <div class="btn-group btn-group-sm heatmap-mode-group" role="group" aria-label="Range selection granularity">
+                    <input type="radio" class="btn-check" name="heatmapRangeMode" id="modeDay" value="day" checked autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="modeDay">Day</label>
+
+                    <input type="radio" class="btn-check" name="heatmapRangeMode" id="modeWeek" value="week" autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="modeWeek">Week</label>
+
+                    <input type="radio" class="btn-check" name="heatmapRangeMode" id="modeMonth" value="month" autocomplete="off">
+                    <label class="btn btn-outline-secondary" for="modeMonth">Month</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="heatmap-body">
+        <div id="heatmap-scroll" class="heatmap-scroll-container">
+            <div id="heatmap-svg-container" class="heatmap-svg-wrapper"></div>
+        </div>
+        <div id="heatmap-tooltip" class="heatmap-tooltip" role="tooltip"></div>
+    </div>
+
+    <div class="heatmap-footer">
+        <div id="heatmapSelectedInfo" class="heatmap-selected-info" aria-live="polite">
+            <span class="text-muted">Click any date square to select a range</span>
+        </div>
+
+        <div class="heatmap-legend" aria-label="Reading intensity legend">
+            <span class="legend-label">Less</span>
+            <span class="legend-box level-0" title="0 characters"></span>
+            <span class="legend-box level-1" title="1 - 2,500 characters"></span>
+            <span class="legend-box level-2" title="2,500 - 7,500 characters"></span>
+            <span class="legend-box level-3" title="7,500 - 15,000 characters"></span>
+            <span class="legend-box level-4" title="15,000+ characters"></span>
+            <span class="legend-label">More</span>
+        </div>
+    </div>
+
+    <script id="heatmap-data" type="application/json">
+        @Html.Raw(Model.HeatmapDataJson)
+    </script>
+</section>

@@ -11,6 +11,8 @@
     <a class="btn btn-primary" asp-page="/Import/Index">Add media</a>
 </div>
 
+<partial name="_Heatmap" model="Model" />
+
 <section class="stat-grid" aria-label="Immersion summary">
     <article class="stat-card">
         <span class="stat-label">Characters this week</span>
@@ -34,11 +36,6 @@
     </article>
 </section>
 
-<section class="content-card empty-state">
-    <h2>Your dashboard is ready</h2>
-    <p>Once this project is connected to Core, active works and recent sessions will appear here.</p>
-    <div class="empty-actions">
-        <a class="btn btn-primary" asp-page="/Import/Index">Import your first work</a>
-        <a class="btn btn-outline-secondary" asp-page="/Library/Index">Open library</a>
-    </div>
-</section>
+@section Scripts {
+    <script src="~/js/heatmap.js" asp-append-version="true"></script>
+}

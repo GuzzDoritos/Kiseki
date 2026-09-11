@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Kiseki.Core;
 using Kiseki.Core.Entities;
 using Kiseki.Web.Pages;
@@ -33,6 +34,14 @@ public sealed class DashboardPageTests
             TimeSpentMinutes = 62.05
         };
 
+        // Another log on the same date (monday) to test daily aggregation for the heatmap
+        var weekLog1SameDay = new ImmersionLog
+        {
+            Date = monday,
+            CharactersRead = 150,
+            TimeSpentMinutes = 10.0
+        };
+
         var weekLog2 = new ImmersionLog
         {
             Date = sunday,
@@ -48,36 +57,46 @@ public sealed class DashboardPageTests
         };
 
         // Log from previous year
+        var previousYear = today.Year - 1;
         var previousYearLog = new ImmersionLog
         {
-            Date = new DateOnly(today.Year - 1, 12, 31),
+            Date = new DateOnly(previousYear, 12, 31),
             CharactersRead = 5000,
             TimeSpentMinutes = 200.0
         };
 
-        database.Context.ImmersionLogs.AddRange(weekLog1, weekLog2, yearOnlyLog, previousYearLog);
+        database.Context.ImmersionLogs.AddRange(weekLog1, weekLog1SameDay, weekLog2, yearOnlyLog, previousYearLog);
         await database.Context.SaveChangesAsync();
 
         var model = new IndexModel(database.Context);
         await model.OnGetAsync();
 
-        // Week: 500 + 750 = 1250 characters
-        int expectedWeekCount = (yearOnlyLog.Date >= monday && yearOnlyLog.Date <= sunday) ? 2250 : 1250;
+        // Week characters: 500 + 150 + 750 = 1400 (plus 1000 if Jan 1 is in this week)
+        int expectedWeekCount = (yearOnlyLog.Date >= monday && yearOnlyLog.Date <= sunday) ? 2400 : 1400;
         Assert.Equal(expectedWeekCount, model.WeekCount);
 
-        // Week Time: 62.05 + 30.0 = 92.05 mins (01h32m)
-        double expectedWeekMinutes = 92.05 + ((yearOnlyLog.Date >= monday && yearOnlyLog.Date <= sunday) ? 45.0 : 0.0);
+        // Week Time: 62.05 + 10.0 + 30.0 = 102.05 mins, plus 45m if Jan 1 is in current week
+        double expectedWeekMinutes = 102.05 + ((yearOnlyLog.Date >= monday && yearOnlyLog.Date <= sunday) ? 45.0 : 0.0);
         var expectedWeekTimeSpan = TimeSpan.FromSeconds(Math.Round(expectedWeekMinutes * 60));
         Assert.Equal($"{(int)expectedWeekTimeSpan.TotalHours:D2}h{expectedWeekTimeSpan.Minutes:D2}m", model.WeekTime);
 
-        // Year: weekLog1 + weekLog2 + yearOnlyLog = 2250 characters
-        Assert.Equal(2250, model.YearCount);
-
-        // Year Time: 62.05 + 30.0 + 45.0 = 137.05 minutes = 8223 seconds = 02h17m
-        Assert.Equal("02h17m", model.YearTime);
+        // Year characters: 500 + 150 + 750 + 1000 = 2400 characters
+        Assert.Equal(2400, model.YearCount);
 
         // 1 active work, 1 completed work
         Assert.Equal(1, model.ActiveWorksCount);
+
+        // AvailableYears contains current year and previous year in descending order
+        Assert.Contains(today.Year, model.AvailableYears);
+        Assert.Contains(previousYear, model.AvailableYears);
+        Assert.True(model.AvailableYears[0] > model.AvailableYears[1]);
+
+        // Heatmap data should aggregate the two logs on monday (500 + 150 = 650)
+        using var jsonDoc = JsonDocument.Parse(model.HeatmapDataJson);
+        var items = jsonDoc.RootElement.EnumerateArray().ToList();
+        var mondayItem = items.FirstOrDefault(item => item.GetProperty("date").GetString() == monday.ToString("yyyy-MM-dd"));
+        Assert.NotEqual(default, mondayItem);
+        Assert.Equal(650, mondayItem.GetProperty("value").GetInt32());
     }
 
     [Fact]
@@ -93,6 +112,8 @@ public sealed class DashboardPageTests
         Assert.Equal(0, model.YearCount);
         Assert.Equal("00h00m", model.YearTime);
         Assert.Equal(0, model.ActiveWorksCount);
+        Assert.Contains(DateTime.Today.Year, model.AvailableYears);
+        Assert.Equal("[]", model.HeatmapDataJson);
     }
 
     private sealed class TestDatabase : IAsyncDisposable

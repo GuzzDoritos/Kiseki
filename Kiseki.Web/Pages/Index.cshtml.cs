@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Kiseki.Core;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,8 @@ public class IndexModel(ImmersionDbContext dbContext) : PageModel
     public int YearCount { get; set; }
     public string YearTime { get; set; } = "00h00m";
     public int ActiveWorksCount { get; set; }
+    public IReadOnlyList<int> AvailableYears { get; set; } = [];
+    public string HeatmapDataJson { get; set; } = "[]";
 
     public async Task OnGetAsync(CancellationToken cancellationToken = default)
     {
@@ -51,5 +54,36 @@ public class IndexModel(ImmersionDbContext dbContext) : PageModel
         ActiveWorksCount = await dbContext.MediaWorks
             .AsNoTracking()
             .CountAsync(work => !work.IsCompleted, cancellationToken);
+
+        // Aggregate daily character totals across all logs for the activity heatmap
+        var heatmapLogs = await dbContext.ImmersionLogs
+            .AsNoTracking()
+            .GroupBy(log => log.Date)
+            .Select(g => new
+            {
+                Date = g.Key,
+                Value = g.Sum(l => l.CharactersRead)
+            })
+            .OrderBy(x => x.Date)
+            .ToListAsync(cancellationToken);
+
+        HeatmapDataJson = JsonSerializer.Serialize(
+            heatmapLogs.Select(x => new
+            {
+                date = x.Date.ToString("yyyy-MM-dd"),
+                value = x.Value
+            }));
+
+        var years = heatmapLogs
+            .Select(x => x.Date.Year)
+            .Distinct()
+            .ToList();
+
+        if (!years.Contains(today.Year))
+        {
+            years.Add(today.Year);
+        }
+
+        AvailableYears = years.OrderByDescending(y => y).ToList();
     }
 }
