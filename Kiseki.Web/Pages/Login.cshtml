@@ -1,0 +1,64 @@
+@page
+@model Kiseki.Web.Pages.LoginModel
+@{
+    Layout = "_AuthLayout";
+    ViewData["Title"] = "Sign In";
+}
+
+<div class="auth-card">
+    <div class="auth-brand-header">
+        <div class="auth-brand-badge">
+            <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 12 12" width="22" height="22">
+                    <rect x="1" y="1.5" width="2.5" height="9" rx=".5" fill="#ff1100"></rect>
+                    <rect x="4.75" y="1.5" width="2.5" height="9" rx=".5" fill="#ff1100"></rect>
+                    <rect x="8.5" y="1.5" width="2.5" height="9" rx=".5" fill="#ff1100" opacity=".55"></rect>
+                </svg>
+            </span>
+        </div>
+        <h1 class="auth-title">Kiseki</h1>
+        <p class="auth-subtitle">軌跡 &middot; Immersion Tracker</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="auth-error-alert" role="alert">
+            <svg class="auth-error-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+                <path d="M8 4.5v4M8 11.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+            </svg>
+            <span>@Model.ErrorMessage</span>
+        </div>
+    }
+
+    <form method="post" class="auth-form" autocomplete="off">
+        <input type="hidden" asp-for="ReturnUrl" />
+
+        <div class="auth-field">
+            <label asp-for="Password" class="auth-label">Password</label>
+            <div class="auth-input-wrap">
+                <input asp-for="Password"
+                       type="password"
+                       class="auth-input"
+                       placeholder="Enter your password"
+                       required
+                       autofocus
+                       autocomplete="current-password" />
+            </div>
+        </div>
+
+        <div class="auth-options">
+            <label class="auth-checkbox-label">
+                <input asp-for="RememberMe" type="checkbox" class="auth-checkbox" />
+                <span>Remember this device (30 days)</span>
+            </label>
+        </div>
+
+        <button type="submit" class="auth-submit-btn">
+            <span>Unlock Tracker</span>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path d="M3 8h10M9 4l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+        </button>
+    </form>
+</div>

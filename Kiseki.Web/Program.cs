@@ -1,6 +1,7 @@
 using Kiseki.Core;
 using Kiseki.Core.Services;
 using Kiseki.Web.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +23,11 @@ if (!string.IsNullOrEmpty(dbParent))
 }
 
 // Add services to the container.
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.AuthorizeFolder("/");
+    options.Conventions.AllowAnonymousToPage("/Login");
+});
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<ImmersionDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
@@ -30,6 +35,19 @@ builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddSingleton<TtsuDataLoader>();
 builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
+builder.Services.AddSingleton<IAuthService, SinglePasswordAuthService>();
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "Kiseki.Auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.LoginPath = "/Login";
+        options.ExpireTimeSpan = TimeSpan.FromDays(30);
+        options.SlidingExpiration = true;
+    });
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -57,6 +75,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
