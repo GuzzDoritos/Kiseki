@@ -6,3 +6,9 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      - key: DatabaseProvider
+        value: postgres
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: KISEKI_PASSWORD
+        sync: false
