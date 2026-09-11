@@ -7,4 +7,7 @@ public class ImmersionLog
     public int CharactersRead { get; set; }
     public double TimeSpentMinutes { get; set; }
     public string Source { get; set; } = "ttsu";
+    public Guid? MediaWorkId { get; set; }
+    public Guid? TtsuBindingId { get; set; }
+    public long? SourceRevision { get; set; }
 }

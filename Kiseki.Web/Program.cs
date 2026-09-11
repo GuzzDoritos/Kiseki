@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 
-LoadDotEnvFile();
+DotEnvFile.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +16,7 @@ if (string.IsNullOrEmpty(provider))
 {
     // If not explicitly set: default to postgres in production or if DefaultConnection is set, otherwise sqlite
     if (!string.IsNullOrEmpty(builder.Configuration.GetConnectionString("DefaultConnection")) ||
+        !string.IsNullOrEmpty(builder.Configuration["DATABASE_URL"]) ||
         !builder.Environment.IsDevelopment())
     {
         provider = "postgres";
@@ -119,20 +120,7 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ImmersionDbContext>();
-    if (context.Database.IsNpgsql())
-    {
-        // For PostgreSQL (Production / Neon):
-        // Run authoritative EF Core migrations
-        await context.Database.MigrateAsync();
-    }
-    else if (context.Database.IsSqlite())
-    {
-        // For local SQLite development:
-        // EnsureCreatedAsync provisions tables if the database does not exist,
-        // and does nothing if the database (and tables) already exist.
-        // It NEVER drops, deletes, or overwrites existing data or migrations history.
-        await context.Database.EnsureCreatedAsync();
-    }
+    await DatabaseInitializer.MigrateAsync(context);
 }
 
 app.UseForwardedHeaders();
@@ -155,48 +143,5 @@ app.MapRazorPages()
 
 app.Run();
 
-static void LoadDotEnvFile()
-{
-    var current = Directory.GetCurrentDirectory();
-    string[] candidates = [
-        Path.Combine(current, ".env"),
-        Path.Combine(current, "..", ".env"),
-        Path.Combine(AppContext.BaseDirectory, ".env"),
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".env")
-    ];
-
-    foreach (var path in candidates)
-    {
-        var fullPath = Path.GetFullPath(path);
-        if (File.Exists(fullPath))
-        {
-            foreach (var line in File.ReadAllLines(fullPath))
-            {
-                var trimmed = line.Trim();
-                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith('#'))
-                    continue;
-
-                var idx = trimmed.IndexOf('=');
-                if (idx > 0)
-                {
-                    var key = trimmed[..idx].Trim();
-                    var val = trimmed[(idx + 1)..].Trim();
-                    if ((val.StartsWith('"') && val.EndsWith('"')) ||
-                        (val.StartsWith('\'') && val.EndsWith('\'')))
-                    {
-                        val = val[1..^1];
-                    }
-                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
-                    {
-                        Environment.SetEnvironmentVariable(key, val);
-                    }
-                }
-            }
-            break;
-        }
-    }
-}
-
 static string NormalizePostgreSqlConnectionString(string connectionString)
     => Kiseki.Web.PostgreSqlConnectionStringNormalizer.Normalize(connectionString);
-

@@ -113,7 +113,7 @@ public sealed class TtsuDataLoaderTests
     }
 
     [Fact]
-    public async Task LoadDirectoryAsync_UsesTheNewestStatisticsFileForABook()
+    public async Task LoadDirectoryAsync_DoesNotDiscardDifferentTitlesBasedOnFileTime()
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "Kiseki.Tests", Guid.NewGuid().ToString("N"));
         var bookPath = Directory.CreateDirectory(Path.Combine(rootPath, "Book")).FullName;
@@ -130,7 +130,9 @@ public sealed class TtsuDataLoaderTests
 
             var books = await _loader.LoadDirectoryAsync(rootPath);
 
-            Assert.Equal("Newer", Assert.Single(books).Title);
+            Assert.Equal(2, books.Count);
+            Assert.Contains(books, book => book.Title == "Newer");
+            Assert.Contains(books, book => book.Title == "Older");
         }
         finally
         {

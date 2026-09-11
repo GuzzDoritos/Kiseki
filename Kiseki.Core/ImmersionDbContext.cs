@@ -12,6 +12,8 @@ namespace Kiseki.Core
         public DbSet<MediaWork> MediaWorks { get; set; }
 
         public DbSet<ImmersionLog> ImmersionLogs { get; set; }
+        public DbSet<TtsuBinding> TtsuBindings { get; set; }
+        public DbSet<TtsuImportReceipt> TtsuImportReceipts { get; set; }
 
         public string DbPath => string.Empty;
 
@@ -31,15 +33,45 @@ namespace Kiseki.Core
                 var connStr = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
                     ?? Environment.GetEnvironmentVariable("DATABASE_URL");
 
-                if (!string.IsNullOrWhiteSpace(connStr))
+                var provider = Environment.GetEnvironmentVariable("DatabaseProvider")?.Trim().ToLowerInvariant();
+                if (provider is not (null or "sqlite" or "postgres" or "postgresql" or "npgsql"))
+                    throw new InvalidOperationException("DatabaseProvider must be sqlite or postgres.");
+                if (provider != "sqlite" && !string.IsNullOrWhiteSpace(connStr))
                 {
-                    options.UseNpgsql(connStr);
+                    options.UseNpgsql(Services.PostgreSqlConnectionStringNormalizer.Normalize(connStr),
+                        npgsql => npgsql.ExecutionStrategy(deps => new Services.NeonRetryingExecutionStrategy(deps)));
+                }
+                else if (provider is "postgres" or "postgresql" or "npgsql")
+                    throw new InvalidOperationException("Set ConnectionStrings__DefaultConnection for PostgreSQL.");
+                else
+                {
+                    var path = Environment.GetEnvironmentVariable("KISEKI_DB_PATH") ??
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "kiseki.db");
+                    path = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path));
+                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                    options.UseSqlite(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = path }.ToString());
                 }
             }
         }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            modelBuilder.Entity<TtsuBinding>(entity =>
+            {
+                entity.HasKey(binding => binding.MediaWorkId);
+                entity.Property(binding => binding.Version).IsConcurrencyToken();
+                entity.HasOne<MediaWork>().WithOne().HasForeignKey<TtsuBinding>(binding => binding.MediaWorkId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+            modelBuilder.Entity<ImmersionLog>(entity =>
+            {
+                entity.HasOne<MediaWork>().WithMany(work => work.Logs).HasForeignKey(log => log.MediaWorkId);
+                entity.HasOne<TtsuBinding>().WithMany().HasForeignKey(log => log.TtsuBindingId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasIndex(log => new { log.TtsuBindingId, log.Date }).IsUnique();
+                entity.ToTable(table => table.HasCheckConstraint("CK_ImmersionLogs_TtsuBinding",
+                    "\"TtsuBindingId\" IS NULL OR (\"MediaWorkId\" IS NOT NULL AND \"TtsuBindingId\" = \"MediaWorkId\" AND \"Source\" = 'ttsu')"));
+            });
             modelBuilder.Entity<Franchise>(entity =>
             {
                 entity.Property(franchise => franchise.Title).IsRequired();

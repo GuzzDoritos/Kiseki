@@ -1,330 +1,179 @@
 using Kiseki.Core;
 using Kiseki.Core.DTOs;
 using Kiseki.Core.Entities;
+using Kiseki.Core.Models;
 using Kiseki.Core.Services;
 using Kiseki.Web.Models;
 using Kiseki.Web.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.EntityFrameworkCore;
 
 namespace Kiseki.Web.Pages.Import;
 
 [RequestSizeLimit(MaxRequestBytes)]
-[RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes, ValueCountLimit = 10_000)]
-public sealed class TtsuModel(
-    TtsuDataLoader dataLoader,
-    ITtsuImportBatchStore batchStore,
-    ImmersionDbContext dbContext) : PageModel
+[RequestFormLimits(MultipartBodyLengthLimit = MaxRequestBytes, ValueCountLimit = 100_000)]
+public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore batchStore, ImmersionDbContext dbContext) : PageModel
 {
-    private const int MaxStatisticsFiles = 250;
-    private const long MaxStatisticsFileBytes = 8 * 1024 * 1024;
     private const long MaxRequestBytes = 64 * 1024 * 1024;
-
-    [BindProperty]
-    public List<IFormFile> FolderFiles { get; set; } = [];
-
-    [BindProperty]
-    public Guid BatchId { get; set; }
-
-    [BindProperty]
-    public List<TtsuBookSelectionInput> Selections { get; set; } = [];
-
+    private readonly TtsuImportService _imports = new(dbContext);
+    [BindProperty] public List<IFormFile> FolderFiles { get; set; } = [];
+    [BindProperty] public Guid BatchId { get; set; }
+    [BindProperty] public List<TtsuBookSelectionInput> Selections { get; set; } = [];
     public IReadOnlyList<TtsuBookPreviewViewModel> Books { get; private set; } = [];
+    public IReadOnlyList<TtsuTarget> Targets { get; private set; } = [];
+    public IReadOnlyList<TtsuOrphanViewModel> Orphans { get; private set; } = [];
     public List<string> Warnings { get; } = [];
     public bool HasPreview => BatchId != Guid.Empty && Books.Count > 0;
-
-    public void OnGet()
-    {
-    }
+    public void OnGet() { }
 
     public async Task<IActionResult> OnPostPreviewAsync(CancellationToken cancellationToken)
     {
-        if (FolderFiles.Count == 0)
+        var files = FolderFiles.Where(file => TtsuDataLoader.IsStatisticsFileName(file.FileName)).ToList();
+        if (files.Count is 0 or > 250)
         {
-            ModelState.AddModelError(nameof(FolderFiles), "Choose your TTSU data folder first.");
+            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with between 1 and 250 statistics files.");
             return Page();
         }
-
-        var statisticsFiles = FolderFiles
-            .Where(file => TtsuDataLoader.IsStatisticsFileName(file.FileName))
-            .ToList();
-
-        if (statisticsFiles.Count == 0)
-        {
-            ModelState.AddModelError(
-                nameof(FolderFiles),
-                "No TTSU statistics files were found in the selected folder.");
-            return Page();
-        }
-
-        if (statisticsFiles.Count > MaxStatisticsFiles)
-        {
-            ModelState.AddModelError(
-                nameof(FolderFiles),
-                $"The folder contains more than the supported limit of {MaxStatisticsFiles} statistics files.");
-            return Page();
-        }
-
-        var parsedBooks = new List<ParsedBook>();
-        foreach (var file in statisticsFiles)
+        var parsed = new List<TtsuBookContainer>();
+        foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var displayName = DisplayFileName(file.FileName);
-
-            if (file.Length == 0)
+            var path = file.FileName.Replace('\\', '/');
+            if (file.Length is 0 or > 8 * 1024 * 1024)
             {
-                Warnings.Add($"{displayName} was empty and was skipped.");
+                Warnings.Add($"{path} was empty or larger than 8 MB and was skipped.");
                 continue;
             }
-
-            if (file.Length > MaxStatisticsFileBytes)
-            {
-                Warnings.Add($"{displayName} was larger than 8 MB and was skipped.");
-                continue;
-            }
-
             try
             {
                 await using var stream = file.OpenReadStream();
-                var book = await dataLoader.ParseStatisticsAsync(
-                    stream,
-                    FolderTitle(file.FileName),
-                    cancellationToken);
-                var latestModified = book.Entries.Count == 0
-                    ? 0
-                    : book.Entries.Max(entry => entry.LastStatisticModified);
-
-                parsedBooks.Add(new ParsedBook(book, displayName, latestModified));
+                var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                var folder = parts.Length > 1 ? parts[^2] : null;
+                var book = await dataLoader.ParseStatisticsAsync(stream, folder, cancellationToken);
+                // Ignore the chosen root directory, which changes between exports/machines.
+                book.FolderHint = parts.Length > 2 ? string.Join('/', parts.Skip(1).SkipLast(1)) : folder;
+                parsed.Add(book);
             }
             catch (Exception exception) when (exception is InvalidDataException or IOException)
             {
-                Warnings.Add($"{displayName} was skipped: {exception.Message}");
+                Warnings.Add($"{path} was skipped: {exception.Message}");
             }
         }
-
-        var books = parsedBooks
-            .GroupBy(item => TtsuBookImporter.NormalizeTitle(item.Book.Title))
-            .Select(group =>
-            {
-                var selected = group
-                    .OrderByDescending(item => item.LatestModified)
-                    .ThenBy(item => item.SourceName, StringComparer.OrdinalIgnoreCase)
-                    .First();
-
-                if (group.Count() > 1)
-                {
-                    Warnings.Add(
-                        $"Multiple statistics files described '{selected.Book.Title}'. " +
-                        $"The newest file, {selected.SourceName}, was used.");
-                }
-
-                return selected.Book;
-            })
-            .OrderBy(book => book.Title, StringComparer.CurrentCultureIgnoreCase)
-            .ToList();
-
-        if (books.Count == 0)
+        if (parsed.Count == 0)
         {
-            ModelState.AddModelError(
-                nameof(FolderFiles),
-                "None of the detected statistics files could be read.");
+            ModelState.AddModelError(nameof(FolderFiles), "None of the detected statistics files could be read.");
             return Page();
         }
+        var batch = batchStore.Store(TtsuStatisticsNormalizer.CombineFiles(parsed));
+        await PopulateAsync(batch, false, cancellationToken);
+        return Page();
+    }
 
-        var batch = batchStore.Store(books);
-        await PopulatePreviewAsync(batch, preserveSelections: false, cancellationToken);
+    public async Task<IActionResult> OnPostReviewAsync(CancellationToken cancellationToken)
+    {
+        if (!TryBatch(out var batch)) return Page();
+        await PopulateAsync(batch, true, cancellationToken);
         return Page();
     }
 
     public async Task<IActionResult> OnPostConfirmAsync(CancellationToken cancellationToken)
     {
-        if (BatchId == Guid.Empty || !batchStore.TryGet(BatchId, out var batch))
-        {
-            ModelState.AddModelError(
-                string.Empty,
-                "This import preview has expired. Choose the TTSU folder again.");
-            BatchId = Guid.Empty;
-            return Page();
-        }
-
+        var receipt = await _imports.GetReceiptAsync(BatchId, cancellationToken);
+        if (receipt is not null) return Success(receipt);
+        if (!TryBatch(out var batch)) return Page();
         if (!ModelState.IsValid)
         {
-            await PopulatePreviewAsync(batch, preserveSelections: true, cancellationToken);
+            ModelState.AddModelError(string.Empty, "One or more import choices were invalid. Review the selections.");
+            await PopulateAsync(batch, true, cancellationToken);
             return Page();
         }
-
-        var selectedInputs = Selections
-            .Where(selection => selection.Selected)
-            .GroupBy(selection => selection.BookKey)
-            .Select(group => group.First())
-            .ToList();
-
-        if (selectedInputs.Count == 0)
+        try
         {
-            ModelState.AddModelError(nameof(Selections), "Select at least one book to import.");
-            await PopulatePreviewAsync(batch, preserveSelections: true, cancellationToken);
-            return Page();
-        }
-
-        var batchBooks = batch.Books.ToDictionary(item => item.Key);
-        if (selectedInputs.Any(selection => !batchBooks.ContainsKey(selection.BookKey)))
-        {
-            ModelState.AddModelError(string.Empty, "The selected import data is no longer valid.");
-            await PopulatePreviewAsync(batch, preserveSelections: true, cancellationToken);
-            return Page();
-        }
-
-        var importedBooks = 0;
-        var addedSessions = 0;
-        var updatedSessions = 0;
-
-        var strategy = dbContext.Database.CreateExecutionStrategy();
-        await strategy.ExecuteAsync(async () =>
-        {
-            dbContext.ChangeTracker.Clear();
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-            var existingWorks = await dbContext.MediaWorks
-                .Where(work => work.MediaType == MediaType.Book)
-                .Include(work => work.Logs)
-                .ToListAsync(cancellationToken);
-            var existingByTitle = existingWorks
-                .GroupBy(work => TtsuBookImporter.NormalizeTitle(work.Title))
-                .ToDictionary(group => group.Key, group => group.First());
-
-            importedBooks = 0;
-            addedSessions = 0;
-            updatedSessions = 0;
-
-            foreach (var selection in selectedInputs)
+            var selected = Selections.Where(x => x.Selected).ToList();
+            if (selected.Select(x => x.BookKey).Distinct().Count() != selected.Count)
+                throw new TtsuImportReviewRequiredException("A book was selected more than once.");
+            var requests = new List<TtsuImportRequest>();
+            foreach (var input in selected)
             {
-                var book = batchBooks[selection.BookKey].Book;
-                var normalizedTitle = TtsuBookImporter.NormalizeTitle(book.Title);
-
-                if (selection.Mode == TtsuImportMode.Merge &&
-                    existingByTitle.TryGetValue(normalizedTitle, out var existingWork))
-                {
-                    var result = TtsuBookImporter.MergeInto(existingWork, book);
-                    dbContext.ImmersionLogs.AddRange(result.AddedLogs);
-                    addedSessions += result.AddedSessions;
-                    updatedSessions += result.UpdatedSessions;
-                }
-                else
-                {
-                    var newWork = TtsuBookImporter.CreateMediaWork(book);
-                    dbContext.MediaWorks.Add(newWork);
-                    addedSessions += newWork.Logs.Count;
-
-                    if (selection.Mode == TtsuImportMode.Merge)
-                    {
-                        existingByTitle[normalizedTitle] = newWork;
-                    }
-                }
-
-                importedBooks++;
+                var book = batch.Books.SingleOrDefault(x => x.Key == input.BookKey);
+                if (book is null || !Enum.IsDefined(input.Mode) || !batch.Reviews.TryGetValue(input.ReviewToken, out var review) || review.BookKey != input.BookKey)
+                    throw new TtsuImportReviewRequiredException("The selection is invalid. Review the import again.");
+                if (input.Mode == TtsuImportMode.Merge && input.TargetId is null)
+                    throw new TtsuImportReviewRequiredException("Choose an existing book or explicitly choose Create a new copy.");
+                requests.Add(new(book.Book, input.Mode == TtsuImportMode.Create ? null : input.TargetId,
+                    Resolutions(input), review.Fingerprint, input.OrphanLogIds));
             }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        });
-
-        batchStore.Remove(batch.Id);
-
-        TempData["LibraryNotice"] = BuildSuccessMessage(
-            importedBooks,
-            addedSessions,
-            updatedSessions);
-
-        return RedirectToPage("/Library/Index");
+            receipt = await _imports.ApplyAsync(batch.Id, requests, cancellationToken);
+            batchStore.Remove(batch.Id);
+            return Success(receipt);
+        }
+        catch (TtsuImportReviewRequiredException exception)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
+            await PopulateAsync(batch, true, cancellationToken);
+            return Page();
+        }
     }
 
     public IActionResult OnPostCancel()
     {
-        if (BatchId != Guid.Empty)
-        {
-            batchStore.Remove(BatchId);
-        }
-
+        batchStore.Remove(BatchId);
         return RedirectToPage();
     }
 
-    private async Task PopulatePreviewAsync(
-        TtsuImportBatch batch,
-        bool preserveSelections,
-        CancellationToken cancellationToken)
+    private bool TryBatch(out TtsuImportBatch batch)
+    {
+        if (BatchId != Guid.Empty && batchStore.TryGet(BatchId, out batch)) return true;
+        batch = null!;
+        ModelState.AddModelError(string.Empty, "This import preview has expired. Choose the TTSU folder again.");
+        BatchId = Guid.Empty;
+        return false;
+    }
+
+    private async Task PopulateAsync(TtsuImportBatch batch, bool preserve, CancellationToken cancellationToken)
     {
         BatchId = batch.Id;
-
-        var existingWorks = await dbContext.MediaWorks
-            .AsNoTracking()
-            .Where(work => work.MediaType == MediaType.Book)
-            .Select(work => new { work.Id, work.Title })
-            .ToListAsync(cancellationToken);
-        var existingByTitle = existingWorks
-            .GroupBy(work => TtsuBookImporter.NormalizeTitle(work.Title))
-            .ToDictionary(group => group.Key, group => group.First().Id);
-
-        Books = batch.Books
-            .Select(item =>
-            {
-                var normalizedTitle = TtsuBookImporter.NormalizeTitle(item.Book.Title);
-                Guid? existingWorkId = existingByTitle.TryGetValue(normalizedTitle, out var workId)
-                    ? workId
-                    : null;
-
-                return TtsuBookPreviewViewModel.Create(item.Key, item.Book, existingWorkId);
-            })
-            .ToList();
-
-        var postedSelections = preserveSelections
-            ? Selections
-                .GroupBy(selection => selection.BookKey)
-                .ToDictionary(group => group.Key, group => group.First())
-            : [];
-
-        Selections = Books
-            .Select(book => postedSelections.GetValueOrDefault(book.BookKey) ?? new TtsuBookSelectionInput
-            {
-                BookKey = book.BookKey,
-                Selected = true,
-                Mode = TtsuImportMode.Merge
-            })
-            .ToList();
-    }
-
-    private static string? FolderTitle(string uploadedFileName)
-    {
-        var parts = uploadedFileName
-            .Replace('\\', '/')
-            .Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-        return parts.Length > 1 ? parts[^2] : null;
-    }
-
-    private static string DisplayFileName(string uploadedFileName)
-    {
-        var normalized = uploadedFileName.Replace('\\', '/');
-        return normalized[(normalized.LastIndexOf('/') + 1)..];
-    }
-
-    private static string BuildSuccessMessage(int books, int addedSessions, int updatedSessions)
-    {
-        var bookLabel = books == 1 ? "book" : "books";
-        var sessionLabel = addedSessions == 1 ? "session" : "sessions";
-        var message = $"Imported {books} {bookLabel} with {addedSessions} new {sessionLabel}.";
-
-        if (updatedSessions > 0)
+        Targets = await _imports.GetTargetsAsync(cancellationToken);
+        Orphans = (await _imports.GetOrphansAsync(cancellationToken)).Select(x => new TtsuOrphanViewModel(x.Id, x.Date, x.CharactersRead, x.TimeSpentMinutes)).ToList();
+        var posted = preserve ? Selections.GroupBy(x => x.BookKey).ToDictionary(x => x.Key, x => x.First()) : [];
+        var books = new List<TtsuBookPreviewViewModel>();
+        Selections = [];
+        foreach (var item in batch.Books)
         {
-            var updatedLabel = updatedSessions == 1 ? "session was" : "sessions were";
-            message += $" {updatedSessions} existing {updatedLabel} updated.";
+            var match = await _imports.MatchAsync(item.Book, cancellationToken);
+            var input = posted.GetValueOrDefault(item.Key) ?? new TtsuBookSelectionInput
+            {
+                BookKey = item.Key,
+                Selected = true,
+                TargetId = match.WorkId,
+                Mode = match.WorkId is null && !match.IsAmbiguous ? TtsuImportMode.Create : TtsuImportMode.Merge
+            };
+            var plan = await _imports.PreviewAsync(item.Book, input.Mode == TtsuImportMode.Create ? null : input.TargetId,
+                Resolutions(input), input.OrphanLogIds, cancellationToken);
+            if (!Enum.IsDefined(input.Mode) || input.Mode == TtsuImportMode.Merge && input.TargetId is null)
+                plan = plan with { Error = "Choose a target book or create a new copy." };
+            var choices = Resolutions(input);
+            input.Days = plan.Days.Where(x => x.ReviewReason is not null).Select(x => new TtsuDayResolutionInput
+            { Date = x.Date, Choice = choices.GetValueOrDefault(x.Date) ?? string.Empty }).ToList();
+            input.ReviewToken = Guid.NewGuid();
+            batch.Reviews[input.ReviewToken] = new(item.Key, plan.Fingerprint);
+            books.Add(new(item.Key, item.Book.Title, item.Book.FolderHint, match.Reason, plan));
+            Selections.Add(input);
         }
-
-        return message;
+        Books = books;
+        // Render newly generated review tokens and normalized choices, not the posted values.
+        foreach (var key in ModelState.Keys.Where(x => x.StartsWith("Selections[", StringComparison.Ordinal)).ToList())
+            ModelState.Remove(key);
     }
 
-    private sealed record ParsedBook(
-        TtsuBookContainer Book,
-        string SourceName,
-        long LatestModified);
+    private static Dictionary<DateOnly, string> Resolutions(TtsuBookSelectionInput input) =>
+        input.Days.GroupBy(x => x.Date).ToDictionary(x => x.Key, x => x.First().Choice);
+
+    private IActionResult Success(TtsuImportReceipt receipt)
+    {
+        TempData["LibraryNotice"] = receipt.AddedDays == 0 && receipt.UpdatedDays == 0
+            ? $"Statistics are already up to date. {receipt.StaleDays} older days skipped."
+            : $"Imported {receipt.Books} books: {receipt.AddedDays} new days, {receipt.UpdatedDays} updated days, {receipt.UnchangedDays} unchanged days, {receipt.StaleDays} older days skipped.";
+        return RedirectToPage("/Library/Index");
+    }
 }

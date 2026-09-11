@@ -1,5 +1,6 @@
 using Kiseki.Core.DTOs;
 using Kiseki.Core.Entities;
+using Kiseki.Core.Models;
 
 namespace Kiseki.Core.Services;
 
@@ -7,88 +8,38 @@ public static class TtsuBookImporter
 {
     public static MediaWork CreateMediaWork(TtsuBookContainer book)
     {
-        ValidateBook(book);
-
         var work = new MediaWork(book.Title.Trim(), mediaType: MediaType.Book);
-        foreach (var log in MapLatestDailyLogs(book))
-        {
-            work.Logs.Add(log);
-        }
-
+        MergeInto(work, book);
         return work;
     }
 
     public static TtsuMergeResult MergeInto(MediaWork work, TtsuBookContainer book)
     {
         ArgumentNullException.ThrowIfNull(work);
-        ValidateBook(book);
-
-        var existingLogsByDate = work.Logs
-            .Where(log => string.Equals(log.Source, "ttsu", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(log => log.Date)
-            .ToDictionary(group => group.Key, group => group.First());
-
-        var added = 0;
-        var updated = 0;
-        var addedLogs = new List<ImmersionLog>();
-
-        foreach (var incomingLog in MapLatestDailyLogs(book))
+        var plan = TtsuMergePlanner.Plan(work, book);
+        if (!plan.CanApply) throw new TtsuImportReviewRequiredException("Review conflicting statistics before merging.");
+        var added = new List<ImmersionLog>();
+        foreach (var day in plan.Days.Where(x => x.Accepted is not null))
         {
-            if (existingLogsByDate.TryGetValue(incomingLog.Date, out var existingLog))
+            var log = work.Logs.SingleOrDefault(x => x.Id == day.RetainedLogId);
+            if (log is null)
             {
-                existingLog.CharactersRead = incomingLog.CharactersRead;
-                existingLog.TimeSpentMinutes = incomingLog.TimeSpentMinutes;
-                existingLog.Source = incomingLog.Source;
-                updated++;
-                continue;
+                log = new ImmersionLog { Date = day.Date };
+                work.Logs.Add(log);
+                added.Add(log);
             }
-
-            work.Logs.Add(incomingLog);
-            existingLogsByDate.Add(incomingLog.Date, incomingLog);
-            addedLogs.Add(incomingLog);
-            added++;
+            log.CharactersRead = day.Accepted!.Characters;
+            log.TimeSpentMinutes = day.Accepted.Minutes;
+            log.SourceRevision = day.Accepted.Revision;
         }
-
-        return new TtsuMergeResult(added, updated, addedLogs);
+        return new(added.Count, plan.Count(TtsuDayAction.Updated), added);
     }
 
     public static string NormalizeTitle(string title)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
-
-        return string.Join(
-                ' ',
-                title.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-            .ToUpperInvariant();
-    }
-
-    private static IReadOnlyList<ImmersionLog> MapLatestDailyLogs(TtsuBookContainer book)
-    {
-        return book.Entries
-            .Select((entry, index) => new { Entry = entry, Index = index })
-            .GroupBy(item => item.Entry.DateKey, StringComparer.Ordinal)
-            .Select(group => group
-                .OrderByDescending(item => item.Entry.LastStatisticModified)
-                .ThenByDescending(item => item.Index)
-                .First()
-                .Entry
-                .ToImmersionLog())
-            .OrderBy(log => log.Date)
-            .ToList();
-    }
-
-    private static void ValidateBook(TtsuBookContainer book)
-    {
-        ArgumentNullException.ThrowIfNull(book);
-
-        if (string.IsNullOrWhiteSpace(book.Title))
-        {
-            throw new ArgumentException("A TTSU book title is required.", nameof(book));
-        }
+        return string.Join(' ', title.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant();
     }
 }
 
-public sealed record TtsuMergeResult(
-    int AddedSessions,
-    int UpdatedSessions,
-    IReadOnlyList<ImmersionLog> AddedLogs);
+public sealed record TtsuMergeResult(int AddedSessions, int UpdatedSessions, IReadOnlyList<ImmersionLog> AddedLogs);

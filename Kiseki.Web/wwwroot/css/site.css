@@ -1319,7 +1319,7 @@ table,
 
 .ttsu-book-preview {
   display: grid;
-  grid-template-columns: auto minmax(190px, 1fr) minmax(360px, 1.5fr) minmax(180px, .7fr);
+  grid-template-columns: auto minmax(190px, 1fr) minmax(240px, 1fr);
   align-items: center;
   gap: 16px;
   padding: 16px;
@@ -1359,8 +1359,9 @@ table,
 }
 
 .ttsu-book-stats {
+  grid-column: 2 / -1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin: 0;
 }
@@ -1389,6 +1390,33 @@ table,
 
 .ttsu-import-mode {
   min-width: 0;
+}
+
+.ttsu-merge-totals,
+.ttsu-book-preview > .import-warnings {
+  grid-column: 2 / -1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.ttsu-day-resolution {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.ttsu-day-resolution label {
+  color: var(--color-ink-2);
+  font-size: 12px;
+}
+
+.ttsu-import-mode .form-text {
+  color: var(--color-ink-3);
+  font-size: 11px;
+}
+
+.import-validation.validation-summary-valid {
+  display: none;
 }
 
 .ttsu-import-mode label {

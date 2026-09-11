@@ -158,6 +158,99 @@ public sealed class TtsuImportPageTests
         Assert.Empty(await database.Context.MediaWorks.ToListAsync());
     }
 
+    [Fact]
+    public async Task Confirm_LegacyDifferenceRequiresResolutionAndRefreshedReview()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new Kiseki.Core.Entities.MediaWork("Test Book");
+        work.Logs.Add(new() { Date = new(2026, 8, 5), CharactersRead = 1 });
+        database.Context.Add(work);
+        await database.Context.SaveChangesAsync();
+        using var fixture = File.OpenRead(GetFixturePath());
+        var model = CreateModel(database.Context);
+        model.FolderFiles = [StatisticsFile(fixture)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        Assert.False(model.Books.Single().Plan.CanApply);
+        model.Selections[0].Days[0].Choice = "incoming:0";
+        // The new decision has not yet been shown in a reviewed preview.
+        Assert.IsType<PageResult>(await model.OnPostConfirmAsync(CancellationToken.None));
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(1, (await database.Context.ImmersionLogs.SingleAsync()).CharactersRead);
+        model.ModelState.Clear();
+        Assert.IsType<RedirectToPageResult>(await model.OnPostConfirmAsync(CancellationToken.None));
+        Assert.Equal(2, await database.Context.ImmersionLogs.CountAsync());
+    }
+
+    [Fact]
+    public async Task Confirm_RejectsAmbiguousTargetsAndInvalidModes()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        database.Context.AddRange(new Kiseki.Core.Entities.MediaWork("Test Book"), new Kiseki.Core.Entities.MediaWork("test book"));
+        await database.Context.SaveChangesAsync();
+        using var fixture = File.OpenRead(GetFixturePath());
+        var model = CreateModel(database.Context);
+        model.FolderFiles = [StatisticsFile(fixture)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        Assert.Null(model.Selections.Single().TargetId);
+        Assert.IsType<PageResult>(await model.OnPostConfirmAsync(CancellationToken.None));
+        model.ModelState.Clear();
+        model.Selections[0].Mode = (Kiseki.Web.Models.TtsuImportMode)99;
+        Assert.IsType<PageResult>(await model.OnPostConfirmAsync(CancellationToken.None));
+        Assert.Empty(await database.Context.ImmersionLogs.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Confirm_TargetChangeRequiresReviewAndUsesExplicitId()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var target = new Kiseki.Core.Entities.MediaWork("Renamed book");
+        database.Context.Add(target);
+        await database.Context.SaveChangesAsync();
+        using var fixture = File.OpenRead(GetFixturePath());
+        var model = CreateModel(database.Context);
+        model.FolderFiles = [StatisticsFile(fixture)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        model.Selections[0].Mode = Kiseki.Web.Models.TtsuImportMode.Merge;
+        model.Selections[0].TargetId = target.Id;
+        Assert.IsType<PageResult>(await model.OnPostConfirmAsync(CancellationToken.None));
+        Assert.Empty(await database.Context.ImmersionLogs.ToListAsync());
+        model.ModelState.Clear();
+        Assert.IsType<RedirectToPageResult>(await model.OnPostConfirmAsync(CancellationToken.None));
+        Assert.Equal(target.Id, (await database.Context.MediaWorks.SingleAsync()).Id);
+        Assert.Equal("Renamed book", (await database.Context.MediaWorks.SingleAsync()).Title);
+    }
+
+    [Fact]
+    public async Task Confirm_ReplayedPostAfterPreviewRemovalReturnsReceipt()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixture = File.OpenRead(GetFixturePath());
+        var model = CreateModel(database.Context);
+        model.FolderFiles = [StatisticsFile(fixture)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        await model.OnPostConfirmAsync(CancellationToken.None);
+        var anotherRequest = CreateModel(database.Context);
+        anotherRequest.BatchId = model.BatchId;
+        Assert.IsType<RedirectToPageResult>(await anotherRequest.OnPostConfirmAsync(CancellationToken.None));
+        Assert.Single(await database.Context.MediaWorks.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Preview_MultipleFilesUseDailyUnionAndMatchCommittedTotals()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var source = await File.ReadAllTextAsync(GetFixturePath());
+        using var first = new MemoryStream(Encoding.UTF8.GetBytes(source));
+        using var second = new MemoryStream(Encoding.UTF8.GetBytes(source.Replace("2026-08-06", "2026-08-07")));
+        var model = CreateModel(database.Context);
+        model.FolderFiles = [StatisticsFile(first), StatisticsFile(second)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        var preview = Assert.Single(model.Books);
+        Assert.Equal(3, preview.Plan.Days.Count);
+        await model.OnPostConfirmAsync(CancellationToken.None);
+        Assert.Equal(preview.CharactersRead, await database.Context.ImmersionLogs.SumAsync(x => (long)x.CharactersRead));
+    }
+
     private static TtsuModel CreateModel(ImmersionDbContext context)
     {
         var httpContext = new DefaultHttpContext();

@@ -17,11 +17,12 @@ public sealed class TtsuReaderDTO
     public double ReadingTime { get; set; }
 
     [JsonPropertyName("lastStatisticModified")]
-    public long LastStatisticModified { get; set; }
+    public long? LastStatisticModified { get; set; }
 }
 
 public sealed class TtsuBookContainer
 {
     public string Title { get; set; } = string.Empty;
+    public string? FolderHint { get; set; }
     public List<TtsuReaderDTO> Entries { get; set; } = [];
 }

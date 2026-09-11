@@ -1,163 +1,137 @@
 @page
 @model Kiseki.Web.Pages.Import.TtsuModel
+@using Kiseki.Core.Models
+@using Kiseki.Web.Models
 @{
     ViewData["Title"] = "Import from TTSU";
 }
-
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
     <a asp-page="/Import/Index">Import</a><span>/</span><span>TTSU</span>
 </nav>
-
 <div class="page-header compact">
     <div>
         <p class="eyebrow">Reading history</p>
-        <h1>Import from TTSU</h1>
-        <p class="page-description">Choose your TTSU data folder, review the detected books, and confirm what belongs in your library.</p>
+        <h1>Import or update from TTSU</h1>
+        <p class="page-description">Choose your TTSU folder and review changes to your daily totals. Dates missing from the export are kept.</p>
     </div>
 </div>
-
 <div asp-validation-summary="All" class="import-validation" role="alert"></div>
-
 @if (Model.Warnings.Count > 0)
 {
     <aside class="import-warnings" aria-label="Import warnings">
         <strong>Some files need attention</strong>
-        <ul>
-            @foreach (var warning in Model.Warnings)
-            {
-                <li>@warning</li>
-            }
-        </ul>
+        <ul>@foreach (var warning in Model.Warnings) { <li>@warning</li> }</ul>
     </aside>
 }
-
 <section class="content-card ttsu-upload-card">
-    <form class="ttsu-upload-form"
-          method="post"
-          enctype="multipart/form-data"
-          asp-page-handler="Preview">
+    <form method="post" enctype="multipart/form-data" asp-page-handler="Preview">
         <div class="ttsu-folder-picker">
-            <svg class="ttsu-upload-icon" aria-hidden="true" viewBox="0 0 24 24">
-                <path d="M3.5 7.5h6l1.8 2h9.2v8.75A2.25 2.25 0 0 1 18.25 20H5.75a2.25 2.25 0 0 1-2.25-2.25V7.5Z"></path>
-                <path d="M12 16V6m-3 3 3-3 3 3"></path>
-            </svg>
-            <div class="ttsu-picker-copy">
-                <strong>Select your TTSU data folder</strong>
-                <span data-ttsu-selection-summary>Only statistics files will be processed.</span>
-            </div>
-            <input class="visually-hidden"
-                   asp-for="FolderFiles"
-                   type="file"
-                   webkitdirectory
-                   multiple
-                   data-ttsu-folder-input />
+            <svg class="ttsu-upload-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3.5 7.5h6l1.8 2h9.2v8.75A2.25 2.25 0 0 1 18.25 20H5.75a2.25 2.25 0 0 1-2.25-2.25V7.5Z"></path><path d="M12 16V6m-3 3 3-3 3 3"></path></svg>
+            <div class="ttsu-picker-copy"><strong>Select your TTSU data folder</strong><span data-ttsu-selection-summary>Only statistics files will be processed.</span></div>
+            <input class="visually-hidden" asp-for="FolderFiles" type="file" webkitdirectory multiple data-ttsu-folder-input />
             <label class="btn btn-outline-secondary" asp-for="FolderFiles">Choose folder</label>
         </div>
-
-        <div class="form-actions ttsu-upload-actions">
-            <button class="btn btn-primary" type="submit">Preview books</button>
-            @if (Model.HasPreview)
-            {
-                <span class="form-text">Selecting another folder will replace this preview.</span>
-            }
-        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Preview books</button></div>
     </form>
 </section>
-
 @if (Model.HasPreview)
 {
     <section class="ttsu-preview" aria-labelledby="ttsu-preview-title">
-        <div class="ttsu-preview-heading">
-            <div>
-                <p class="eyebrow">Import preview</p>
-                <h2 id="ttsu-preview-title">@Model.Books.Count @(Model.Books.Count == 1 ? "book" : "books") detected</h2>
-            </div>
-            <span>Nothing has been saved yet</span>
-        </div>
-
+        <div class="ttsu-preview-heading"><h2 id="ttsu-preview-title">Review @Model.Books.Count @(Model.Books.Count == 1 ? "book" : "books")</h2><span>Nothing has been saved yet</span></div>
+        <p>After changing a target or resolving a day, select <strong>Refresh review</strong> to see the resulting totals before confirming. Deselect any books you want to skip.</p>
         <form method="post" asp-page-handler="Confirm">
             <input type="hidden" asp-for="BatchId" />
-
             <div class="ttsu-book-list">
-                @for (var index = 0; index < Model.Books.Count; index++)
-                {
-                    var book = Model.Books[index];
-                    <article class="content-card ttsu-book-preview">
-                        <input type="hidden" asp-for="Selections[index].BookKey" />
-
-                        <div class="ttsu-book-select">
-                            <input class="form-check-input"
-                                   asp-for="Selections[index].Selected"
-                                   aria-label="Select @book.Title for import" />
+            @for (var index = 0; index < Model.Books.Count; index++)
+            {
+                var book = Model.Books[index];
+                var plan = book.Plan;
+                <article class="content-card ttsu-book-preview">
+                    <input type="hidden" asp-for="Selections[index].BookKey" />
+                    <input type="hidden" asp-for="Selections[index].ReviewToken" />
+                    <div class="ttsu-book-select"><input class="form-check-input" asp-for="Selections[index].Selected" aria-label="Select @book.Title" /></div>
+                    <div class="ttsu-book-copy">
+                        <h3>@book.Title</h3><p>@book.FolderHint</p><span class="import-match">@book.MatchReason</span>
+                    </div>
+                    <div class="ttsu-import-mode">
+                        <label asp-for="Selections[index].Mode">Import behavior</label>
+                        <select class="form-select" asp-for="Selections[index].Mode">
+                            <option value="Merge">Update existing work</option><option value="Create">Create a new copy</option>
+                        </select>
+                        <label asp-for="Selections[index].TargetId">Existing book to update</label>
+                        <select class="form-select" asp-for="Selections[index].TargetId">
+                            <option value="">Choose a book</option>
+                            @foreach (var target in Model.Targets) { <option value="@target.Id">@target.Title (@target.Id.ToString()[..8])</option> }
+                        </select>
+                        <p class="form-text">A new copy keeps its own history. If multiple copies match a later export, you will choose which one to update.</p>
+                    </div>
+                    @if (plan.Error is not null) { <p class="import-warnings">@plan.Error</p> }
+                    <dl class="ttsu-book-stats">
+                        <div><dt>New days</dt><dd>@plan.Count(TtsuDayAction.Added)</dd></div>
+                        <div><dt>Updated</dt><dd>@plan.Count(TtsuDayAction.Updated)</dd></div>
+                        <div><dt>Unchanged</dt><dd>@plan.Count(TtsuDayAction.Unchanged)</dd></div>
+                        <div><dt>Older skipped</dt><dd>@plan.Count(TtsuDayAction.Stale)</dd></div>
+                        <div><dt>Needs review</dt><dd>@plan.Count(TtsuDayAction.Conflict)</dd></div>
+                    </dl>
+                    <div class="ttsu-merge-totals">
+                        <strong>@plan.TargetTitle</strong>
+                        <p>Characters: @plan.CurrentCharacters.ToString("N0") → @plan.ResultCharacters.ToString("N0") (@((plan.ResultCharacters - plan.CurrentCharacters).ToString("+0;-0;0")))</p>
+                        <p>Reading time: @TtsuBookPreviewViewModel.FormatDuration(plan.CurrentMinutes * 60) → @TtsuBookPreviewViewModel.FormatDuration(plan.ResultMinutes * 60)</p>
+                        @if (!plan.CanApply) { <p>Totals are provisional until all selected conflicts are resolved.</p> }
+                    </div>
+                    <details class="ttsu-entry-details" open="@(plan.Days.Any(day => day.ReviewReason is not null))">
+                        <summary>Review daily changes</summary>
+                        <div class="ttsu-entry-table-wrap">
+                            <table class="ttsu-entry-table">
+                                <thead><tr><th>Date</th><th>Current characters / time</th><th>Incoming characters / time</th><th>Result</th></tr></thead>
+                                <tbody>
+                                @foreach (var day in plan.Days)
+                                {
+                                    <tr>
+                                        <td>@day.Date.ToString("yyyy-MM-dd")</td>
+                                        <td>@foreach (var old in day.Existing) { <div>@old.Characters.ToString("N0") / @TtsuBookPreviewViewModel.FormatDuration(old.Minutes * 60)</div> }</td>
+                                        <td>@foreach (var incoming in day.Incoming) { <div>@incoming.Characters.ToString("N0") / @TtsuBookPreviewViewModel.FormatDuration(incoming.Minutes * 60)</div> }</td>
+                                        <td>@day.Action</td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
                         </div>
-
-                        <div class="ttsu-book-copy">
-                            <h3>@book.Title</h3>
-                            @if (book.ExistsInLibrary)
-                            {
-                                <span class="import-match import-match-existing">Already in library</span>
-                            }
-                            else
-                            {
-                                <span class="import-match">New library work</span>
-                            }
-                        </div>
-
-                        <dl class="ttsu-book-stats">
-                            <div><dt>Sessions</dt><dd>@book.EntryCount.ToString("N0")</dd></div>
-                            <div><dt>Characters</dt><dd>@book.CharactersRead.ToString("N0")</dd></div>
-                            <div><dt>Reading time</dt><dd>@book.ReadingTimeLabel</dd></div>
-                            <div><dt>Date range</dt><dd>@book.DateRangeLabel</dd></div>
-                        </dl>
-
-                        <div class="ttsu-import-mode">
-                            @if (book.ExistsInLibrary)
-                            {
-                                <label asp-for="Selections[index].Mode">Import behavior</label>
-                                <select class="form-select" asp-for="Selections[index].Mode">
-                                    <option value="Merge">Update existing work</option>
-                                    <option value="Create">Create another copy</option>
-                                </select>
-                            }
-                            else
-                            {
-                                <input type="hidden" asp-for="Selections[index].Mode" />
-                            }
-                        </div>
-
-                        @if (book.Entries.Count > 0)
+                        @for (var dayIndex = 0; dayIndex < Model.Selections[index].Days.Count; dayIndex++)
                         {
-                            <details class="ttsu-entry-details">
-                                <summary>View reading entries</summary>
-                                <div class="ttsu-entry-table-wrap">
-                                    <table class="ttsu-entry-table">
-                                        <thead>
-                                            <tr><th>Date</th><th>Characters</th><th>Time</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var entry in book.Entries)
-                                            {
-                                                <tr>
-                                                    <td>@(entry.Date?.ToString("MMM d, yyyy") ?? "Unknown")</td>
-                                                    <td>@entry.CharactersRead.ToString("N0")</td>
-                                                    <td>@entry.ReadingTimeLabel</td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </details>
+                            var day = plan.Days.Single(x => x.Date == Model.Selections[index].Days[dayIndex].Date);
+                            <div class="ttsu-day-resolution">
+                                <input type="hidden" asp-for="Selections[index].Days[dayIndex].Date" />
+                                <label asp-for="Selections[index].Days[dayIndex].Choice">@day.Date.ToString("yyyy-MM-dd"): @day.ReviewReason</label>
+                                <select class="form-select" asp-for="Selections[index].Days[dayIndex].Choice">
+                                    <option value="">Choose the total to keep</option>
+                                    @foreach (var old in day.Existing) { <option value="keep:@old.Id">Keep stored: @old.Characters characters / @TtsuBookPreviewViewModel.FormatDuration(old.Minutes * 60) (revision @(old.Revision?.ToString() ?? "unknown"))</option> }
+                                    @for (var candidate = 0; candidate < day.Incoming.Count; candidate++)
+                                    {
+                                        var incoming = day.Incoming[candidate];
+                                        <option value="incoming:@candidate">Use incoming baseline: @incoming.Characters characters / @TtsuBookPreviewViewModel.FormatDuration(incoming.Minutes * 60) (revision @(incoming.Revision?.ToString() ?? "unknown"))</option>
+                                    }
+                                </select>
+                            </div>
                         }
-                    </article>
-                }
+                    </details>
+                    @if (Model.Orphans.Count > 0)
+                    {
+                        <details class="ttsu-entry-details">
+                            <summary>Assign unassigned TTSU logs to this existing book</summary>
+                            <label asp-for="Selections[index].OrphanLogIds">Select only logs belonging to this book. Leave others unselected.</label>
+                            <select multiple class="form-select" asp-for="Selections[index].OrphanLogIds">
+                                @foreach (var orphan in Model.Orphans) { <option value="@orphan.Id">@orphan.Date.ToString("yyyy-MM-dd") — @orphan.Characters chars / @TtsuBookPreviewViewModel.FormatDuration(orphan.Minutes * 60) (@orphan.Id.ToString()[..8])</option> }
+                            </select>
+                        </details>
+                    }
+                </article>
+            }
             </div>
-
             <div class="form-actions ttsu-confirm-actions">
-                <button class="btn btn-primary" type="submit">Import selected books</button>
-                <button class="btn btn-link"
-                        type="submit"
-                        asp-page-handler="Cancel"
-                        formnovalidate>Cancel</button>
+                <button class="btn btn-outline-secondary" type="submit" asp-page-handler="Review">Refresh review</button>
+                <button class="btn btn-primary" type="submit">Confirm selected books</button>
+                <button class="btn btn-link" type="submit" asp-page-handler="Cancel" formnovalidate>Cancel</button>
             </div>
         </form>
     </section>

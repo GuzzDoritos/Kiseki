@@ -6,6 +6,11 @@ public static class DatabaseInitializer
 {
     public static async Task<string?> MigrateAsync(ImmersionDbContext context)
     {
+        if (context.Database.IsSqlite())
+        {
+            await SqliteSchemaUpgrade.ApplyAsync(context);
+            return null;
+        }
         var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
 
         if (!pendingMigrations.Any())

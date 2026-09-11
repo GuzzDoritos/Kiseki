@@ -6,6 +6,7 @@ using System.Text;
 using Spectre.Console;
 
 System.Console.OutputEncoding = Encoding.UTF8;
+DotEnvFile.Load();
 
 await using var context = new ImmersionDbContext();
 var backupPath = await DatabaseInitializer.MigrateAsync(context);

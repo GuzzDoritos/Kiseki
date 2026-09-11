@@ -33,7 +33,8 @@ public static class TtsuSessionMapper
             Date = date,
             CharactersRead = entry.CharactersRead,
             TimeSpentMinutes = entry.ReadingTime / 60d,
-            Source = "ttsu"
+            Source = "ttsu",
+            SourceRevision = entry.LastStatisticModified > 0 ? entry.LastStatisticModified : null
         };
     }
 }

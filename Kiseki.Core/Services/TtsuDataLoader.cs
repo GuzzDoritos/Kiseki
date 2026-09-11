@@ -32,42 +32,38 @@ public sealed class TtsuDataLoader
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var statisticsFile = Directory
+            var statisticsFiles = Directory
                 .EnumerateFiles(bookDirectory)
                 .Where(IsStatisticsFileName)
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-
-            if (statisticsFile is null)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+            foreach (var statisticsFile in statisticsFiles)
             {
-                continue;
-            }
+                await using var stream = new FileStream(
+                    statisticsFile,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.ReadWrite,
+                    bufferSize: 4096,
+                    useAsync: true);
 
-            await using var stream = new FileStream(
-                statisticsFile,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite,
-                bufferSize: 4096,
-                useAsync: true);
-
-            try
-            {
-                books.Add(await ParseStatisticsAsync(
-                    stream,
-                    Path.GetFileName(bookDirectory),
-                    cancellationToken));
-            }
-            catch (InvalidDataException exception)
-            {
-                throw new InvalidDataException(
-                    $"Could not load TTSU statistics from '{statisticsFile}'. {exception.Message}",
-                    exception);
+                try
+                {
+                    var book = await ParseStatisticsAsync(
+                        stream,
+                        Path.GetFileName(bookDirectory),
+                        cancellationToken);
+                    book.FolderHint = Path.GetFileName(bookDirectory);
+                    books.Add(book);
+                }
+                catch (InvalidDataException exception)
+                {
+                    throw new InvalidDataException(
+                        $"Could not load TTSU statistics from '{statisticsFile}'. {exception.Message}",
+                        exception);
+                }
             }
         }
-
-        return books;
+        return TtsuStatisticsNormalizer.CombineFiles(books);
     }
 
     public async Task<TtsuBookContainer> ParseStatisticsAsync(
@@ -115,11 +111,13 @@ public sealed class TtsuDataLoader
                 "The TTSU statistics file does not identify its book and no folder title was available.");
         }
 
-        return new TtsuBookContainer
+        var book = new TtsuBookContainer
         {
             Title = title,
             Entries = entries
         };
+        TtsuStatisticsNormalizer.Normalize(book);
+        return book;
     }
 
     public static bool IsStatisticsFileName(string? path)
@@ -136,6 +134,8 @@ public sealed class TtsuDataLoader
 
     private static void ValidateEntry(TtsuReaderDTO entry, int index)
     {
+        if (entry is null)
+            throw new InvalidDataException($"Entry {index + 1} is null.");
         if (!TtsuSessionMapper.TryParseDate(entry.DateKey, out _))
         {
             throw new InvalidDataException(

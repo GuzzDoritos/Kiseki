@@ -86,13 +86,7 @@ public sealed class AddMediaScreen
                 .AddChoices(ttsuBooks)
                 .EnableSearch());
 
-        var newBook = TtsuBookImporter.CreateMediaWork(bookChoice);
-
-        _context.MediaWorks.Add(newBook);
-        await _context.SaveChangesAsync();
-
-        AnsiConsole.MarkupLine("[green]Book imported successfully.[/]");
-        MediaWorkTable.Write([newBook], "Imported book");
+        await new TtsuImportScreen(new TtsuImportService(_context)).RunAsync(bookChoice);
     }
 
     private async Task PickBookSourceAsync()

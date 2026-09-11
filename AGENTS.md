@@ -78,7 +78,7 @@ Franchise (e.g. "Re:Zero")
 
 ## 3. Persistence & Database Conventions
 
-- **Database Engine**: PostgreSQL (Neon serverless PostgreSQL) via Entity Framework Core (`ImmersionDbContext`) using `Npgsql.EntityFrameworkCore.PostgreSQL`.
+- **Database Engine**: PostgreSQL (Neon serverless PostgreSQL) in production; SQLite is also supported locally via `DatabaseProvider=sqlite`. Shared connection normalization, retry behavior, and startup upgrades live in Core.
 - **Connection Configuration**: Configured via standard ASP.NET Core `ConnectionStrings:DefaultConnection` (or `ConnectionStrings__DefaultConnection` environment variable on Render and local `.env`).
 - **Migrations**:
   - Located in `Kiseki.Core/Migrations`.
@@ -88,6 +88,8 @@ Franchise (e.g. "Re:Zero")
     dotnet tool run dotnet-ef migrations add <MigrationName> --project Kiseki.Core --startup-project Kiseki.Core
     ```
 - **In-Memory Testing**: `Kiseki.Tests` uses in-memory SQLite with `EnsureCreatedAsync()` for isolated, instant test execution without external network dependencies.
+- **Existing local SQLite databases**: `SqliteSchemaUpgrade` applies additive import-state changes to databases previously provisioned with `EnsureCreatedAsync()`. Do not apply PostgreSQL migrations to SQLite or recreate existing local databases.
+- **PostgreSQL integration tests**: Set `KISEKI_TEST_POSTGRES` to a disposable local PostgreSQL server to run migration/concurrency tests. They create isolated test databases and refuse remote hosts.
 - **Query Guidelines**:
   - Read-only queries must use `.AsNoTracking()`.
   - When loading `MediaWork` for progress calculation or details, eagerly load `.Include(w => w.Logs)` and `.Include(w => w.MediaSeries)`.
@@ -102,14 +104,16 @@ Franchise (e.g. "Re:Zero")
 - **Key Pipeline**:
   1. `TtsuDataLoader`: Reads directory or input stream, deserializes `TtsuReaderDTO`, validates `yyyy-MM-dd` dates, character counts, and durations.
   2. `TtsuSessionMapper`: Converts reading time from seconds to minutes (`readingTime / 60d`).
-  3. `TtsuBookImporter`:
-     - Deduplicates multi-entry dates by selecting the entry with the highest `LastStatisticModified` (and highest index as tiebreaker).
-     - `CreateMediaWork`: Creates a new book and populates its logs.
-     - `MergeInto`: Merges imported logs into an existing work's `ttsu`-sourced logs without mutating logs from other sources.
-     - `NormalizeTitle`: Trims, collapses repeated whitespace, and upper-cases text for matching.
+  3. `TtsuStatisticsNormalizer` reconciles multiple files within one source folder/title per day. Newest known revisions win; unknown revisions and conflicting ties remain reviewable candidates.
+  4. `TtsuMergePlanner` produces immutable daily decisions and before/after totals. `TtsuImportService` owns matching, tracked mutations, serializable commits, and durable operation receipts for both Web and Console.
+     - `ImmersionLog.SourceRevision` preserves source modification timestamps. Legacy rows start unknown; reviewed baseline adoption preserves IDs. Missing dates and non-TTSU logs are retained.
+     - `TtsuBinding` uses the work ID as its key, stores the original normalized source title/folder hint, and carries a concurrency token. A unique `(TtsuBindingId, Date)` index applies to bound daily rows; a check constraint enforces source/work consistency.
+     - Match persisted source hints before suggesting normalized-title candidates. Ambiguity requires explicit selection; source renames/moves are not globally identifiable.
+     - Duplicate legacy days and orphan-log assignments require explicit review. Never sum duplicate snapshots or choose a winner silently.
+     - `TtsuBookImporter` remains a convenience for conflict-free in-memory creation/merge; interactive/persistent imports use `TtsuImportService`.
 - **Web Import Workflow**:
   - Uses `ITtsuImportBatchStore` (an in-memory cache with 30-minute TTL).
-  - Multi-step: Folder select -> server parse -> temporary preview -> user confirms selections and merge/create modes -> single transactional commit.
+  - Multi-step: Folder select -> server parse -> temporary preview -> target/conflict choices -> refreshed review -> single transactional commit. Reviewed fingerprints are stored server-side; changes between preview and commit require review again. Expired previews require re-upload; committed receipts survive restarts and prevent replayed POSTs from duplicating work.
 
 ### Jiten.moe Integration
 - **API Client**: `IJitenApiClient` / `JitenApiClient` (`https://api.jiten.moe/`).
