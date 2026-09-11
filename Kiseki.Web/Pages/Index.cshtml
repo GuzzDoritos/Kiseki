@@ -1,5 +1,5 @@
-﻿@page
-@model IndexModel
+@page
+@model Kiseki.Web.Pages.IndexModel
 @{
     ViewData["Title"] = "Dashboard";
 }
@@ -14,18 +14,23 @@
 <section class="stat-grid" aria-label="Immersion summary">
     <article class="stat-card">
         <span class="stat-label">Characters this week</span>
-        <strong>—</strong>
-        <small>Waiting for library data</small>
+        <strong>@Model.WeekCount</strong>
     </article>
     <article class="stat-card">
         <span class="stat-label">Time this week</span>
-        <strong>—</strong>
-        <small>Waiting for session data</small>
+        <strong>@Model.WeekTime</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Characters this year</span>
+        <strong>@Model.YearCount</strong>
+    </article>
+    <article class="stat-card">
+        <span class="stat-label">Time this year</span>
+        <strong>@Model.YearTime</strong>
     </article>
     <article class="stat-card">
         <span class="stat-label">Active works</span>
-        <strong>—</strong>
-        <small>Across all media types</small>
+        <strong>@Model.ActiveWorksCount</strong>
     </article>
 </section>
 
