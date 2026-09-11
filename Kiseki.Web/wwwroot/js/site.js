@@ -61,9 +61,19 @@ document.querySelectorAll("[data-cover-image]").forEach(image => {
 
     NProgress.configure({
         showSpinner: false,
-        speed: 300,
-        minimum: 0.1
+        speed: 350,
+        minimum: 0.3,
+        trickle: true,
+        trickleSpeed: 180,
+        trickleRate: 0.06
     });
+
+    function startProgress() {
+        NProgress.start();
+        if (NProgress.status && NProgress.status < 0.35) {
+            NProgress.set(0.35);
+        }
+    }
 
     // Complete progress when current page has loaded
     NProgress.done();
@@ -106,7 +116,7 @@ document.querySelectorAll("[data-cover-image]").forEach(image => {
                 return;
             }
 
-            NProgress.start();
+            startProgress();
         } catch {
             // Ignore invalid URLs
         }
@@ -125,7 +135,7 @@ document.querySelectorAll("[data-cover-image]").forEach(image => {
             return;
         }
 
-        NProgress.start();
+        startProgress();
 
         const submitButton = event.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
         if (submitButton) {
