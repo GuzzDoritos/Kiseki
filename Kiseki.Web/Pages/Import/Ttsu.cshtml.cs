@@ -175,49 +175,60 @@ public sealed class TtsuModel(
             return Page();
         }
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var existingWorks = await dbContext.MediaWorks
-            .Where(work => work.MediaType == MediaType.Book)
-            .Include(work => work.Logs)
-            .ToListAsync(cancellationToken);
-        var existingByTitle = existingWorks
-            .GroupBy(work => TtsuBookImporter.NormalizeTitle(work.Title))
-            .ToDictionary(group => group.Key, group => group.First());
-
         var importedBooks = 0;
         var addedSessions = 0;
         var updatedSessions = 0;
 
-        foreach (var selection in selectedInputs)
+        var strategy = dbContext.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            var book = batchBooks[selection.BookKey].Book;
-            var normalizedTitle = TtsuBookImporter.NormalizeTitle(book.Title);
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-            if (selection.Mode == TtsuImportMode.Merge &&
-                existingByTitle.TryGetValue(normalizedTitle, out var existingWork))
-            {
-                var result = TtsuBookImporter.MergeInto(existingWork, book);
-                dbContext.ImmersionLogs.AddRange(result.AddedLogs);
-                addedSessions += result.AddedSessions;
-                updatedSessions += result.UpdatedSessions;
-            }
-            else
-            {
-                var newWork = TtsuBookImporter.CreateMediaWork(book);
-                dbContext.MediaWorks.Add(newWork);
-                addedSessions += newWork.Logs.Count;
+            var existingWorks = await dbContext.MediaWorks
+                .Where(work => work.MediaType == MediaType.Book)
+                .Include(work => work.Logs)
+                .ToListAsync(cancellationToken);
+            var existingByTitle = existingWorks
+                .GroupBy(work => TtsuBookImporter.NormalizeTitle(work.Title))
+                .ToDictionary(group => group.Key, group => group.First());
 
-                if (selection.Mode == TtsuImportMode.Merge)
+            importedBooks = 0;
+            addedSessions = 0;
+            updatedSessions = 0;
+
+            foreach (var selection in selectedInputs)
+            {
+                var book = batchBooks[selection.BookKey].Book;
+                var normalizedTitle = TtsuBookImporter.NormalizeTitle(book.Title);
+
+                if (selection.Mode == TtsuImportMode.Merge &&
+                    existingByTitle.TryGetValue(normalizedTitle, out var existingWork))
                 {
-                    existingByTitle[normalizedTitle] = newWork;
+                    var result = TtsuBookImporter.MergeInto(existingWork, book);
+                    dbContext.ImmersionLogs.AddRange(result.AddedLogs);
+                    addedSessions += result.AddedSessions;
+                    updatedSessions += result.UpdatedSessions;
                 }
+                else
+                {
+                    var newWork = TtsuBookImporter.CreateMediaWork(book);
+                    dbContext.MediaWorks.Add(newWork);
+                    addedSessions += newWork.Logs.Count;
+
+                    if (selection.Mode == TtsuImportMode.Merge)
+                    {
+                        existingByTitle[normalizedTitle] = newWork;
+                    }
+                }
+
+                importedBooks++;
             }
 
-            importedBooks++;
-        }
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
 
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
         batchStore.Remove(batch.Id);
 
         TempData["LibraryNotice"] = BuildSuccessMessage(
