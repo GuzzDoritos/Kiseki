@@ -42,7 +42,13 @@ if (provider is "postgres" or "postgresql" or "npgsql")
     var connectionString = NormalizePostgreSqlConnectionString(rawConnectionString);
 
     builder.Services.AddDbContext<ImmersionDbContext>(options =>
-        options.UseNpgsql(connectionString));
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+        {
+            npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null);
+        }));
 }
 else if (provider == "sqlite")
 {

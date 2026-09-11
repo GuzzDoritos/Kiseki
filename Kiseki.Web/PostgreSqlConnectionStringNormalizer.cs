@@ -132,11 +132,7 @@ public static class PostgreSqlConnectionStringNormalizer
             }
         }
 
-        // Enforce SSL on remote hosts (such as Neon) if SSL mode was not explicitly configured in the URI
-        if (!sslModeExplicitlySet && !IsLocalHost(csb.Host))
-        {
-            csb.SslMode = SslMode.Require;
-        }
+        ApplyCloudDefaults(csb, sslModeExplicitlySet);
 
         return csb.ConnectionString;
     }
@@ -145,13 +141,44 @@ public static class PostgreSqlConnectionStringNormalizer
     {
         var csb = new NpgsqlConnectionStringBuilder(connectionString);
 
-        // Neon and cloud providers require SSL. Enforce SslMode.Require on non-local hosts if SSL was disabled.
-        if (!IsLocalHost(csb.Host) && csb.SslMode == SslMode.Disable)
+        var sslExplicit = connectionString.Contains("SSL Mode", StringComparison.OrdinalIgnoreCase) ||
+                          connectionString.Contains("SslMode", StringComparison.OrdinalIgnoreCase);
+
+        ApplyCloudDefaults(csb, sslModeExplicitlySet: sslExplicit);
+
+        return csb.ConnectionString;
+    }
+
+    private static void ApplyCloudDefaults(NpgsqlConnectionStringBuilder csb, bool sslModeExplicitlySet)
+    {
+        if (IsLocalHost(csb.Host))
+            return;
+
+        // Neon and remote cloud providers require SSL. Enforce SslMode.Require if not explicitly set.
+        if (!sslModeExplicitlySet)
         {
             csb.SslMode = SslMode.Require;
         }
 
-        return csb.ConnectionString;
+        // Send TCP keepalive probes every 30 seconds so intermediate firewalls/proxies don't kill idle sockets.
+        if (csb.KeepAlive == 0)
+        {
+            csb.KeepAlive = 30;
+        }
+
+        // For cloud / serverless Postgres (like Neon or PgBouncer), prune connections idle for more than 15 seconds
+        // so client pool does not attempt to reuse sockets severed by the server.
+        if (csb.ConnectionIdleLifetime == 300)
+        {
+            csb.ConnectionIdleLifetime = 15;
+        }
+
+        // If connected through a connection pooler (e.g. Neon's PgBouncer with -pooler in hostname),
+        // disable connection reset (DISCARD ALL) which causes PgBouncer transaction-mode disconnects.
+        if (csb.Host != null && csb.Host.Contains("-pooler", StringComparison.OrdinalIgnoreCase))
+        {
+            csb.NoResetOnClose = true;
+        }
     }
 
     private static bool IsLocalHost(string? host)
