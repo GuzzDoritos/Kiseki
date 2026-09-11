@@ -2081,6 +2081,37 @@ table,
   background: rgba(255, 17, 0, 0.08);
 }
 
+/* NProgress Theme Customization */
+#nprogress .bar {
+  background: var(--color-accent);
+  height: 2px;
+  z-index: 10000;
+}
+
+#nprogress .peg {
+  box-shadow: 0 0 10px var(--color-accent), 0 0 5px var(--color-accent);
+}
+
+#nprogress .spinner {
+  z-index: 10000;
+  top: 18px;
+  right: 18px;
+}
+
+#nprogress .spinner-icon {
+  border-top-color: var(--color-accent);
+  border-left-color: var(--color-accent);
+}
+
+/* Button loading state */
+button.is-loading,
+.btn.is-loading,
+.auth-submit-btn.is-loading {
+  cursor: wait !important;
+  opacity: 0.82;
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
