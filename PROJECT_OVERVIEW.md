@@ -13,7 +13,7 @@ This document describes the repository as it exists now, including which screens
 ```text
                          +------------------+
 TTSU statistics files ->|                  |
-                         |   Kiseki.Core    |-> SQLite: kiseki.db
+                         |   Kiseki.Core    |-> PostgreSQL (Neon)
 Jiten public API <------>| entities/rules/  |
                          | integrations     |
                          +---------+--------+
@@ -24,7 +24,7 @@ Jiten public API <------>| entities/rules/  |
                   Razor Pages         Spectre.Console
 ```
 
-Both applications use the same Core project and the same per-user SQLite database. The Web project is the main visual interface. The Console project is also usable and currently exposes some editing and series operations that the Web interface has not implemented yet.
+Both applications use the same Core project. The Web project is the main visual interface. The Console project is also usable and currently exposes some editing and series operations that the Web interface has not implemented yet.
 
 The central object is `MediaWork`: one concrete item such as a light-novel volume, anime season, or game. It owns immersion logs and may belong to a series. Its character total can come from Jiten or from a manual override.
 
@@ -34,7 +34,7 @@ The solution file is `Kiseki.slnx` and contains four .NET 10 projects.
 
 | Project | Role | Depends on |
 | --- | --- | --- |
-| `Kiseki.Core` | Entities, EF Core database model, migrations, TTSU parsing/import rules, and Jiten client/mapping | EF Core and SQLite |
+| `Kiseki.Core` | Entities, EF Core database model, migrations, TTSU parsing/import rules, and Jiten client/mapping | EF Core and PostgreSQL |
 | `Kiseki.Web` | ASP.NET Core Razor Pages interface | `Kiseki.Core` |
 | `Kiseki.Console` | Interactive terminal interface built with Spectre.Console | `Kiseki.Core` |
 | `Kiseki.Tests` | xUnit unit and integration-style tests | Core and Web |
@@ -45,9 +45,9 @@ The dependency direction is intentional: Core does not reference either front en
 
 - .NET 10 with nullable reference types and implicit usings enabled.
 - ASP.NET Core Razor Pages for the Web application.
-- Entity Framework Core 10 with SQLite for persistence.
+- Entity Framework Core 10 with Npgsql (PostgreSQL / Neon) for persistence.
 - Spectre.Console for the terminal application.
-- xUnit for tests.
+- xUnit for tests (using in-memory SQLite with `EnsureCreatedAsync` for fast, offline test isolation).
 - Bootstrap, a custom dark-theme stylesheet, and a small amount of vanilla JavaScript in Web.
 - `HttpClient` plus `System.Text.Json` for Jiten.
 - A local `dotnet-ef` 10.0.11 tool manifest for migrations.
