@@ -92,6 +92,22 @@ public class MediaWork
         JitenCoverUrl = null;
     }
 
+    public void UpdateCoverUrl(string coverUrl)
+    {
+        if (string.IsNullOrWhiteSpace(coverUrl))
+        {
+            throw new ArgumentException("Cover image URL cannot be empty.", nameof(coverUrl));
+        }
+
+        var normalized = NormalizeJitenCoverUrl(coverUrl);
+        if (normalized is null)
+        {
+            throw new ArgumentException("Cover image URL must be a valid HTTPS URL.", nameof(coverUrl));
+        }
+
+        JitenCoverUrl = normalized;
+    }
+
     private static void ValidateJitenLinkValues(int deckId, int characterCount)
     {
         if (deckId <= 0)

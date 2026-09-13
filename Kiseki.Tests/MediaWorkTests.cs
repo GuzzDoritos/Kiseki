@@ -71,4 +71,38 @@ public class MediaWorkTests
 
         Assert.Null(work.JitenCoverUrl);
     }
+
+    [Fact]
+    public void UpdateCoverUrl_SuccessfullyUpdatesValidHttpsUrl()
+    {
+        var work = new MediaWork("Book");
+
+        work.UpdateCoverUrl("https://cdn.jiten.moe/covers/newcover.jpg");
+
+        Assert.Equal("https://cdn.jiten.moe/covers/newcover.jpg", work.JitenCoverUrl);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void UpdateCoverUrl_ThrowsOnNullEmptyOrWhitespace(string? invalidUrl)
+    {
+        var work = new MediaWork("Book");
+
+        Assert.Throws<ArgumentException>(() => work.UpdateCoverUrl(invalidUrl!));
+    }
+
+    [Theory]
+    [InlineData("http://cdn.jiten.moe/insecure.jpg")]
+    [InlineData("ftp://cdn.jiten.moe/file.jpg")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("not-a-url")]
+    [InlineData("nocover.jpg")]
+    public void UpdateCoverUrl_ThrowsOnNonHttpsOrInvalidUrl(string invalidUrl)
+    {
+        var work = new MediaWork("Book");
+
+        Assert.Throws<ArgumentException>(() => work.UpdateCoverUrl(invalidUrl));
+    }
 }

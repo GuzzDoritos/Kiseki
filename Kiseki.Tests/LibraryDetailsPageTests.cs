@@ -275,6 +275,89 @@ public class LibraryDetailsPageTests
         Assert.Equal(50.0, updatedWork2.ProgressPercentage);
     }
 
+    [Fact]
+    public async Task UpdateCoverUrl_SuccessfullyUpdatesCoverAndSaves()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = new DetailsModel(database.Context);
+        var result = await model.OnPostUpdateCoverUrlAsync(
+            work.Id,
+            new DetailsModel.UpdateCoverUrlRequest { CoverUrl = "https://cdn.jiten.moe/covers/book.jpg" },
+            CancellationToken.None);
+
+        var jsonResult = Assert.IsType<JsonResult>(result);
+        Assert.NotNull(jsonResult.Value);
+
+        var updatedWork = await database.Context.MediaWorks.FindAsync(work.Id);
+        Assert.NotNull(updatedWork);
+        Assert.Equal("https://cdn.jiten.moe/covers/book.jpg", updatedWork.JitenCoverUrl);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UpdateCoverUrl_RejectsEmptyOrWhitespaceUrl(string? emptyUrl)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = new DetailsModel(database.Context);
+        var result = await model.OnPostUpdateCoverUrlAsync(
+            work.Id,
+            new DetailsModel.UpdateCoverUrlRequest { CoverUrl = emptyUrl },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+
+        var unchangedWork = await database.Context.MediaWorks.FindAsync(work.Id);
+        Assert.NotNull(unchangedWork);
+        Assert.Null(unchangedWork.JitenCoverUrl);
+    }
+
+    [Theory]
+    [InlineData("http://insecure.com/cover.jpg")]
+    [InlineData("ftp://files.com/cover.jpg")]
+    [InlineData("not-a-valid-url")]
+    public async Task UpdateCoverUrl_RejectsNonHttpsUrl(string invalidUrl)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = new DetailsModel(database.Context);
+        var result = await model.OnPostUpdateCoverUrlAsync(
+            work.Id,
+            new DetailsModel.UpdateCoverUrlRequest { CoverUrl = invalidUrl },
+            CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+
+        var unchangedWork = await database.Context.MediaWorks.FindAsync(work.Id);
+        Assert.NotNull(unchangedWork);
+        Assert.Null(unchangedWork.JitenCoverUrl);
+    }
+
+    [Fact]
+    public async Task UpdateCoverUrl_ReturnsNotFoundForUnknownWork()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var model = new DetailsModel(database.Context);
+        var result = await model.OnPostUpdateCoverUrlAsync(
+            Guid.NewGuid(),
+            new DetailsModel.UpdateCoverUrlRequest { CoverUrl = "https://cdn.jiten.moe/covers/book.jpg" },
+            CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
     private sealed class TestDatabase : IAsyncDisposable
     {
         private readonly Microsoft.Data.Sqlite.SqliteConnection _connection;

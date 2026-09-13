@@ -188,6 +188,46 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
         });
     }
 
+    public async Task<IActionResult> OnPostUpdateCoverUrlAsync(
+        Guid id,
+        [FromBody] UpdateCoverUrlRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.CoverUrl))
+        {
+            return BadRequest(new { message = "Cover image URL cannot be empty." });
+        }
+
+        var trimmedUrl = request.CoverUrl.Trim();
+        if (trimmedUrl.Length > 2048)
+        {
+            return BadRequest(new { message = "Cover image URL cannot exceed 2,048 characters." });
+        }
+
+        if (!Uri.TryCreate(trimmedUrl, UriKind.Absolute, out var uri) ||
+            !uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Cover image URL must be a valid HTTPS URL." });
+        }
+
+        var work = await dbContext.MediaWorks
+            .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+        if (work is null)
+        {
+            return NotFound(new { message = "Work not found." });
+        }
+
+        work.UpdateCoverUrl(trimmedUrl);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new JsonResult(new
+        {
+            success = true,
+            coverUrl = work.JitenCoverUrl
+        });
+    }
+
     public sealed class UpdateTitleRequest
     {
         public string? Title { get; set; }
@@ -196,5 +236,10 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
     public sealed class UpdateCharacterTotalRequest
     {
         public int? ManualCharacterCount { get; set; }
+    }
+
+    public sealed class UpdateCoverUrlRequest
+    {
+        public string? CoverUrl { get; set; }
     }
 }
