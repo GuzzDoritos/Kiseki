@@ -97,6 +97,16 @@
                          data-cover-image />
                 }
                 <span data-cover-fallback hidden="@(Model.Work.JitenCoverUrl is not null ? "hidden" : null)">@Model.Work.MediaType</span>
+                <button type="button"
+                        class="cover-edit-trigger cover-edit-overlay"
+                        data-cover-edit-trigger
+                        aria-label="Edit cover image"
+                        title="Edit cover image">
+                    <svg class="cover-edit-pencil" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L4.75 13.25 2 14l.75-2.75L11.5 2.5z"></path>
+                    </svg>
+                    Edit
+                </button>
             </div>
 
             <div class="detail-progress">
@@ -160,6 +170,41 @@
             <div><dt>Status</dt><dd data-metadata-status>@Model.Work.StatusLabel</dd></div>
         </dl>
     </aside>
+</div>
+
+<div class="cover-edit-backdrop"
+     data-cover-edit-backdrop
+     data-url="@Url.Page("/Library/Details", "UpdateCoverUrl", new { id = Model.Work.Id })"
+     hidden>
+    <section class="cover-edit-dialog"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="cover-edit-title">
+        <div class="cover-edit-header">
+            <h2 id="cover-edit-title" class="cover-edit-title">Edit cover image</h2>
+            <button type="button"
+                    class="cover-edit-close-btn"
+                    data-cover-edit-close
+                    aria-label="Close cover editor"
+                    title="Close">&times;</button>
+        </div>
+        <div class="cover-edit-field-row">
+            <input type="url"
+                   class="cover-edit-input"
+                   data-cover-edit-input
+                   value="@Model.Work.JitenCoverUrl"
+                   maxlength="2048"
+                   aria-label="Cover image URL"
+                   aria-describedby="cover-edit-error" />
+            <button type="button" class="cover-edit-save-btn" data-cover-edit-save>Save</button>
+        </div>
+        <div id="cover-edit-error"
+             class="cover-edit-error"
+             data-cover-edit-error
+             role="alert"
+             aria-live="polite"
+             hidden></div>
+    </section>
 </div>
 
 <section class="content-card section-block">
