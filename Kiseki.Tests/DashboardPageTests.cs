@@ -19,19 +19,22 @@ public sealed class DashboardPageTests
         var monday = today.AddDays(-daysFromMonday);
         var sunday = monday.AddDays(6);
 
-        // Active work
+        // Active work (has reading activity)
         var activeWork = new MediaWork("Active Work") { IsCompleted = false };
+        // Not started work (no logs, should not count as active)
+        var notStartedWork = new MediaWork("Not Started Work") { IsCompleted = false };
         // Completed work
         var completedWork = new MediaWork("Completed Work") { IsCompleted = true };
 
-        database.Context.MediaWorks.AddRange(activeWork, completedWork);
+        database.Context.MediaWorks.AddRange(activeWork, notStartedWork, completedWork);
 
         // Log inside current week: 1 hour, 2 minutes, 3 seconds = 62.05 minutes
         var weekLog1 = new ImmersionLog
         {
             Date = monday,
             CharactersRead = 500,
-            TimeSpentMinutes = 62.05
+            TimeSpentMinutes = 62.05,
+            MediaWorkId = activeWork.Id
         };
 
         // Another log on the same date (monday) to test daily aggregation for the heatmap

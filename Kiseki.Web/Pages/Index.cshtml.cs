@@ -53,7 +53,7 @@ public class IndexModel(ImmersionDbContext dbContext) : PageModel
 
         ActiveWorksCount = await dbContext.MediaWorks
             .AsNoTracking()
-            .CountAsync(work => !work.IsCompleted, cancellationToken);
+            .CountAsync(work => !work.IsCompleted && work.Logs.Any(l => l.CharactersRead > 0), cancellationToken);
 
         // Aggregate daily character totals across all logs for the activity heatmap
         var heatmapLogs = await dbContext.ImmersionLogs
