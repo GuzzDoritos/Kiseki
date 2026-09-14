@@ -1,14 +1,22 @@
 import { toISODate, formatDateDisplay } from './calendar-math.js';
 
 /**
- * Calculates the date range (start, end, label) for a given date string and mode ('day', 'week', 'month').
+ * Calculates the date range (start, end, label) for a given date string and mode.
  * @param {string} dateStr 
- * @param {'day'|'week'|'month'} mode 
+ * @param {'day'|'week'|'month'|'year'} mode
  * @returns {{ start: string, end: string, label: string }}
  */
 export function getSelectedRange(dateStr, mode) {
     const parts = dateStr.split('-').map(Number);
     const date = new Date(parts[0], parts[1] - 1, parts[2]);
+
+    if (mode === 'year') {
+        return {
+            start: `${parts[0]}-01-01`,
+            end: `${parts[0]}-12-31`,
+            label: String(parts[0])
+        };
+    }
 
     if (mode === 'month') {
         const first = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -70,7 +78,17 @@ export function applySelection(dateStr, dataMap, mode) {
     if (!dateStr) return null;
 
     const currentMode = mode || document.querySelector('input[name="heatmapRangeMode"]:checked')?.value || 'day';
-    const range = getSelectedRange(dateStr, currentMode);
+    let range;
+    if (currentMode === 'all') {
+        const dates = Array.from(dataMap.keys()).sort();
+        range = {
+            start: dates[0] ?? dateStr,
+            end: dates[dates.length - 1] ?? dateStr,
+            label: 'All Time'
+        };
+    } else {
+        range = getSelectedRange(dateStr, currentMode);
+    }
 
     let rangeChars = 0;
     for (const [d, val] of dataMap.entries()) {

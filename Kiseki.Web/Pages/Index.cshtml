@@ -1,7 +1,7 @@
 @page
 @model Kiseki.Web.Pages.IndexModel
 @{
-    ViewData["Title"] = "Dashboard";
+ViewData["Title"] = "Dashboard";
 }
 
 <div class="page-header">
@@ -12,6 +12,8 @@
 </div>
 
 <partial name="_Heatmap" model="Model" />
+
+<partial name="_ReadingVolumeChart" />
 
 <section class="stat-grid" aria-label="Immersion summary">
     <article class="stat-card">
@@ -35,7 +37,10 @@
         <strong>@Model.ActiveWorksCount</strong>
     </article>
 </section>
+<link rel="stylesheet" href="~/css/uPlot.min.css" />
 
 @section Scripts {
+    <script src="~/js/uPlot.iife.min.js"></script>
     <script type="module" src="~/js/heatmap.js" asp-append-version="true"></script>
+    <script type="module" src="~/js/reading-volume.js" asp-append-version="true"></script>
 }
