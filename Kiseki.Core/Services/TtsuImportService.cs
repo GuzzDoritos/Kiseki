@@ -115,6 +115,7 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                     binding.OriginalTitle = TtsuBookImporter.NormalizeTitle(request.Book.Title);
                     binding.FolderHint = request.Book.FolderHint;
                     binding.Version = Guid.NewGuid();
+                    var acceptedProgressUpdate = false;
                     if (plan.Progress.Accepted is { } acceptedProgress)
                     {
                         binding.CurrentCharacterPosition = acceptedProgress.CharacterPosition;
@@ -124,12 +125,28 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                         binding.ProgressDatabaseVersion = acceptedProgress.DatabaseVersion;
                         binding.TotalInferenceKind = acceptedProgress.InferenceKind;
                         receipt.ProgressUpdates++;
+                        acceptedProgressUpdate = true;
 
                         if (acceptedProgress.InferredTotalCharacters is int inferredTotal &&
                             work.TtsuCharacterCount != inferredTotal)
                         {
                             work.UpdateTtsuCharacterCount(inferredTotal);
                             receipt.CharacterTotalUpdates++;
+                        }
+                    }
+                    // TTSU stores a completed bookmark at total - 1 with progress 1.
+                    // Completion is monotonic here: an incomplete bookmark must not erase
+                    // a status the user explicitly marked as completed.
+                    var resultingProgress = plan.Progress.Accepted ?? plan.Progress.Existing;
+                    if (request.Book.ProgressEntries.Count > 0 &&
+                        resultingProgress?.ProgressFraction >= 1d && !work.IsCompleted)
+                    {
+                        work.IsCompleted = true;
+                        if (!acceptedProgressUpdate)
+                        {
+                            // An unchanged bookmark can still repair a work imported before
+                            // completion propagation was introduced.
+                            receipt.ProgressUpdates++;
                         }
                     }
                     foreach (var day in plan.Days)

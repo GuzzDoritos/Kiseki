@@ -45,6 +45,23 @@ public sealed class TtsuBookImporterTests
         Assert.Equal(first, second);
     }
 
+    [Fact]
+    public void CreateMediaWork_CompletedProgressMarksWorkCompleted()
+    {
+        var book = Book();
+        book.ProgressEntries.Add(new TtsuProgressDTO
+        {
+            ExploredCharacterCount = 99_999,
+            Progress = System.Text.Json.JsonSerializer.SerializeToElement(1d),
+            LastBookmarkModified = 10
+        });
+
+        var work = TtsuBookImporter.CreateMediaWork(book);
+
+        Assert.Equal(100_000, work.TotalCharacters);
+        Assert.True(work.IsCompleted);
+    }
+
     private static TtsuBookContainer Book(params TtsuReaderDTO[] entries)
     {
         return new TtsuBookContainer

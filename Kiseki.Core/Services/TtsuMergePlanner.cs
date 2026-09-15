@@ -78,7 +78,8 @@ public static class TtsuMergePlanner
             Progress = progress,
             work?.TtsuCharacterCount,
             work?.ManualCharacterCountOverride,
-            work?.JitenCharacterCount
+            work?.JitenCharacterCount,
+            work?.IsCompleted
         })));
         return new(work?.Id, work?.Title ?? book.Title, fingerprint, days,
             work?.Logs.Sum(x => (long)x.CharactersRead) ?? 0, work?.Logs.Sum(x => x.TimeSpentMinutes) ?? 0,

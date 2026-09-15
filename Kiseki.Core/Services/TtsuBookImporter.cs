@@ -22,6 +22,11 @@ public static class TtsuBookImporter
         {
             work.UpdateTtsuCharacterCount(inferredTotal);
         }
+        var resultingProgress = plan.Progress.Accepted ?? plan.Progress.Existing;
+        if (book.ProgressEntries.Count > 0 && resultingProgress?.ProgressFraction >= 1d)
+        {
+            work.IsCompleted = true;
+        }
         var added = new List<ImmersionLog>();
         foreach (var day in plan.Days.Where(x => x.Accepted is not null))
         {

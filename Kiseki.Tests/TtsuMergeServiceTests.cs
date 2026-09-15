@@ -208,6 +208,29 @@ public sealed class TtsuMergeServiceTests
     }
 
     [Fact]
+    public async Task ProgressImport_CompletedBookmarkMarksWorkCompletedAndRepairsOldImports()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var book = Book();
+        book.ProgressEntries.Add(Progress(99_999, 1, 10));
+
+        await Apply(db.Service, book);
+
+        var work = await db.Context.MediaWorks.SingleAsync();
+        Assert.Equal(100_000, work.TtsuCharacterCount);
+        Assert.True(work.IsCompleted);
+
+        work.IsCompleted = false;
+        await db.Context.SaveChangesAsync();
+
+        var repair = await Apply(db.Service, book, work.Id);
+
+        db.Context.ChangeTracker.Clear();
+        Assert.True((await db.Context.MediaWorks.SingleAsync()).IsCompleted);
+        Assert.Equal(1, repair.ProgressUpdates);
+    }
+
+    [Fact]
     public async Task ProgressImport_SkipsOlderBookmarkAndManualTotalKeepsPriority()
     {
         await using var db = await ImportDatabase.CreateAsync();
