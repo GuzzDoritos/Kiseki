@@ -41,6 +41,7 @@ public static class TtsuStatisticsNormalizer
             {
                 Title = group.First().Title,
                 FolderHint = group.Key.FolderHint,
-                Entries = group.SelectMany(book => book.Entries).ToList()
+                Entries = group.SelectMany(book => book.Entries).ToList(),
+                ProgressEntries = group.SelectMany(book => book.ProgressEntries).ToList()
             }).ToList();
 }

@@ -1,14 +1,17 @@
 @model MediaWorkListItemViewModel
 @{
-    var progressLabel = Model.TotalCharacters > 0
-        ? $"{Model.CharactersRead:N0} / {Model.TotalCharacters:N0} ch"
-        : $"{Model.CharactersRead:N0} ch";
+    var progressLabel = Model.CurrentCharacterPosition is int position && Model.TotalCharacters > 0
+        ? $"{position:N0} / {Model.TotalCharacters:N0} ch position"
+        : Model.TotalCharacters > 0
+            ? $"{Model.CharactersRead:N0} / {Model.TotalCharacters:N0} ch"
+            : $"{Model.CharactersRead:N0} ch";
     var progress = new ProgressBarViewModel(
-        Model.CharactersRead,
+        Model.ProgressCurrent,
         Model.TotalCharacters,
         progressLabel,
         Model.IsCompleted,
-        false);
+        false,
+        Model.PositionProgressPercentage);
 }
 
 <article class="media-row">

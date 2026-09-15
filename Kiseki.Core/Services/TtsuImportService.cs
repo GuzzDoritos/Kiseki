@@ -37,7 +37,7 @@ public sealed class TtsuImportService(ImmersionDbContext context)
 
     public async Task<TtsuImportPlan> PreviewAsync(TtsuBookContainer book, Guid? targetId,
         IReadOnlyDictionary<DateOnly, string>? resolutions = null, IReadOnlyList<Guid>? orphanLogIds = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? progressResolution = null)
     {
         var work = targetId is null ? null : await context.MediaWorks.AsNoTracking()
             .Include(x => x.Logs).Include(x => x.MediaSeries).SingleOrDefaultAsync(x => x.Id == targetId, cancellationToken);
@@ -52,7 +52,7 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                 return TtsuMergePlanner.Plan(work, book) with { Error = "An unassigned log changed. Review its assignment again." };
             work.Logs.AddRange(orphans);
         }
-        var plan = TtsuMergePlanner.Plan(work, book, resolutions, binding);
+        var plan = TtsuMergePlanner.Plan(work, book, resolutions, binding, progressResolution);
         if (orphanLogIds?.Count > 0)
         {
             var assigned = work!.Logs.Where(x => orphanLogIds.Contains(x.Id)).ToList();
@@ -97,7 +97,8 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                 receipt = new TtsuImportReceipt { Id = operationId, Books = requests.Count };
                 foreach (var request in requests)
                 {
-                    var plan = await PreviewAsync(request.Book, request.TargetId, request.Resolutions, request.OrphanLogIds, cancellationToken);
+                    var plan = await PreviewAsync(request.Book, request.TargetId, request.Resolutions,
+                        request.OrphanLogIds, cancellationToken, request.ProgressResolution);
                     if (!plan.CanApply || plan.Fingerprint != request.ExpectedFingerprint)
                         throw new TtsuImportReviewRequiredException(plan.Error ?? "Statistics or choices changed. Review the refreshed preview before confirming.");
                     var work = request.TargetId is null ? new MediaWork(request.Book.Title.Trim()) :
@@ -114,6 +115,23 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                     binding.OriginalTitle = TtsuBookImporter.NormalizeTitle(request.Book.Title);
                     binding.FolderHint = request.Book.FolderHint;
                     binding.Version = Guid.NewGuid();
+                    if (plan.Progress.Accepted is { } acceptedProgress)
+                    {
+                        binding.CurrentCharacterPosition = acceptedProgress.CharacterPosition;
+                        binding.ProgressFraction = acceptedProgress.ProgressFraction;
+                        binding.ProgressRevision = acceptedProgress.Revision;
+                        binding.ProgressExporterVersion = acceptedProgress.ExporterVersion;
+                        binding.ProgressDatabaseVersion = acceptedProgress.DatabaseVersion;
+                        binding.TotalInferenceKind = acceptedProgress.InferenceKind;
+                        receipt.ProgressUpdates++;
+
+                        if (acceptedProgress.InferredTotalCharacters is int inferredTotal &&
+                            work.TtsuCharacterCount != inferredTotal)
+                        {
+                            work.UpdateTtsuCharacterCount(inferredTotal);
+                            receipt.CharacterTotalUpdates++;
+                        }
+                    }
                     foreach (var day in plan.Days)
                     {
                         var retained = work.Logs.SingleOrDefault(x => x.Id == day.RetainedLogId);

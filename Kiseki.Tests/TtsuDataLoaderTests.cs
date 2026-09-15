@@ -62,6 +62,52 @@ public sealed class TtsuDataLoaderTests
     }
 
     [Fact]
+    public async Task ParseProgressAsync_InfersExactTotalAndReadsFilenameVersions()
+    {
+        await using var stream = JsonStream("""
+            {"dataId":7,"exploredCharCount":25000,"progress":0.25,"lastBookmarkModified":1234}
+            """);
+
+        var progress = await _loader.ParseProgressAsync(
+            stream, "progress_1_6_1234_0.25.json");
+        var snapshot = TtsuProgressNormalizer.Normalize(progress);
+
+        Assert.Equal(25_000, snapshot.CharacterPosition);
+        Assert.Equal(100_000, snapshot.InferredTotalCharacters);
+        Assert.Equal(1, snapshot.ExporterVersion);
+        Assert.Equal(6, snapshot.DatabaseVersion);
+    }
+
+    [Fact]
+    public async Task ParseProgressAsync_DoesNotTreatLegacyRoundedPercentageAsExactTotal()
+    {
+        await using var stream = JsonStream("""
+            {"exploredCharCount":25000,"progress":"25.00%","lastBookmarkModified":1234}
+            """);
+
+        var snapshot = TtsuProgressNormalizer.Normalize(
+            await _loader.ParseProgressAsync(stream, "progress_1_6_1234_25%.json"));
+
+        Assert.Equal(0.25, snapshot.ProgressFraction);
+        Assert.Null(snapshot.InferredTotalCharacters);
+        Assert.Equal(Kiseki.Core.Entities.TtsuTotalInferenceKind.RoundedPercentage, snapshot.InferenceKind);
+    }
+
+    [Fact]
+    public async Task ParseProgressAsync_AdjustsCompletedBookmarkPosition()
+    {
+        await using var stream = JsonStream("""
+            {"exploredCharCount":99999,"progress":1,"lastBookmarkModified":1234}
+            """);
+
+        var snapshot = TtsuProgressNormalizer.Normalize(
+            await _loader.ParseProgressAsync(stream, "progress_1_6_1234_1.json"));
+
+        Assert.Equal(100_000, snapshot.InferredTotalCharacters);
+        Assert.Equal(Kiseki.Core.Entities.TtsuTotalInferenceKind.CompletionAdjusted, snapshot.InferenceKind);
+    }
+
+    [Fact]
     public async Task LoadDirectoryAsync_LoadsBookFoldersAndSkipsFoldersWithoutStatistics()
     {
         var rootPath = Path.Combine(Path.GetTempPath(), "Kiseki.Tests", Guid.NewGuid().ToString("N"));

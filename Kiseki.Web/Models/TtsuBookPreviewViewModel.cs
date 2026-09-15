@@ -8,6 +8,8 @@ public sealed record TtsuBookPreviewViewModel(Guid BookKey, string Title, string
     public Guid? ExistingMediaWorkId => Plan.TargetId;
     public bool ExistsInLibrary => ExistingMediaWorkId.HasValue;
     public long CharactersRead => Plan.ResultCharacters;
+    public int? CurrentPosition => Plan.Progress.Accepted?.CharacterPosition ?? Plan.Progress.Existing?.CharacterPosition;
+    public double? PositionPercentage => (Plan.Progress.Accepted?.ProgressFraction ?? Plan.Progress.Existing?.ProgressFraction) * 100d;
     public static string FormatDuration(double seconds)
     {
         var minutes = Math.Max(0, (long)Math.Round(seconds / 60d));
@@ -25,6 +27,7 @@ public sealed class TtsuBookSelectionInput
     public Guid ReviewToken { get; set; }
     public List<TtsuDayResolutionInput> Days { get; set; } = [];
     public List<Guid> OrphanLogIds { get; set; } = [];
+    public string ProgressChoice { get; set; } = string.Empty;
 }
 public sealed class TtsuDayResolutionInput
 {

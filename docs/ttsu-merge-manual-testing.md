@@ -34,6 +34,18 @@ Each numbered folder under `docs/test-data/ttsu-merge` contains its own `ttu-rea
 
 After each step, open the book details and dashboard to check the persisted reading totals. Daily TTSU statistics replace the previous daily snapshot; they are not additional sessions to sum. A book with no known character count can still show zero percent progress; inspect its reading totals rather than relying only on percentage.
 
+## Progress-file and inferred-total check
+
+Add a current TTSU `progress_*.json` file beside a scenario's `statistics.json`. For example:
+
+```json
+{"dataId":7,"exploredCharCount":2500,"progress":0.25,"lastBookmarkModified":4000}
+```
+
+The preview should show a 2,500-character position, 25.00% bookmark progress, and an inferred TTSU total of 10,000 characters. After confirmation, the library details page uses the bookmark position for the progress bar while retaining the sum of daily statistics as “Characters read.” A manual total remains authoritative; otherwise the inferred TTSU total takes priority over Jiten without erasing the Jiten count.
+
+Repeat with an older `lastBookmarkModified`: the stored bookmark and inferred total must remain. Equal revisions with different progress require explicit review. A legacy string such as `"25.00%"` may be rounded and therefore updates the position but does not set an authoritative character total. At `progress: 1`, TTSU stores the final position one character below its book count, so Kiseki infers `exploredCharCount + 1`.
+
 ## Existing library and conflict cases
 
 - **Legacy records:** On a test copy of an older database, import the corresponding TTSU export. Existing rows have no source revision. Matching days that differ, or need a known baseline revision, ask which total to keep. Review before/after values, choose a baseline or keep the current value, refresh, and confirm. Existing work/log IDs and Jiten metadata must remain. Keeping a legacy value leaves its revision unknown, so later changed exports still require review.

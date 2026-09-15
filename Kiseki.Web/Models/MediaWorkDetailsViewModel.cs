@@ -10,12 +10,15 @@ public sealed record MediaWorkDetailsViewModel(
     int? JitenDeckId,
     int? JitenSubdeckId,
     int? JitenCharacterCount,
+    int? TtsuCharacterCount,
     int? ManualCharacterCountOverride,
     string? JitenCoverUrl,
     int CharactersRead,
     int TotalCharacters,
     bool IsCompleted,
-    IReadOnlyList<ImmersionLogViewModel> Logs)
+    IReadOnlyList<ImmersionLogViewModel> Logs,
+    int? CurrentCharacterPosition,
+    double? PositionProgressPercentage)
 {
     public bool HasJitenLink => JitenDeckId.HasValue;
     public int SessionCount => Logs.Count;
@@ -48,13 +51,15 @@ public sealed record MediaWorkDetailsViewModel(
 
     public string CharacterTotalSource => ManualCharacterCountOverride.HasValue
         ? "Manual override"
-        : JitenCharacterCount.HasValue
-            ? "Jiten"
-            : "Not set";
+        : TtsuCharacterCount.HasValue
+            ? "TTSU progress"
+            : JitenCharacterCount.HasValue
+                ? "Jiten"
+                : "Not set";
 
     public string TotalTimeLabel => ImmersionLogViewModel.FormatDuration(TotalTimeMinutes);
 
-    public static MediaWorkDetailsViewModel Create(MediaWork work)
+    public static MediaWorkDetailsViewModel Create(MediaWork work, TtsuBinding? binding = null)
     {
         ArgumentNullException.ThrowIfNull(work);
 
@@ -77,12 +82,15 @@ public sealed record MediaWorkDetailsViewModel(
             work.JitenDeckId,
             work.JitenSubdeckId,
             work.JitenCharacterCount,
+            work.TtsuCharacterCount,
             work.ManualCharacterCountOverride,
             work.JitenCoverUrl,
             work.CurrentCharactersRead,
             work.TotalCharacters,
             work.IsCompleted,
-            logs);
+            logs,
+            binding?.CurrentCharacterPosition,
+            binding?.ProgressFraction * 100d);
     }
 }
 

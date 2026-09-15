@@ -9,9 +9,11 @@ namespace Kiseki.Core.Services;
 public static class TtsuMergePlanner
 {
     public static TtsuImportPlan Plan(MediaWork? work, TtsuBookContainer book,
-        IReadOnlyDictionary<DateOnly, string>? resolutions = null, TtsuBinding? binding = null)
+        IReadOnlyDictionary<DateOnly, string>? resolutions = null, TtsuBinding? binding = null,
+        string? progressResolution = null)
     {
         var snapshots = TtsuStatisticsNormalizer.Normalize(book);
+        var progress = PlanProgress(work, book, binding, progressResolution);
         var logs = work?.Logs.Where(log => string.Equals(log.Source, "ttsu", StringComparison.OrdinalIgnoreCase)).ToList() ?? [];
         var dates = snapshots.Select(x => x.Date).Union(logs.Select(x => x.Date)).Order().ToList();
         var days = new List<TtsuDayPlan>();
@@ -72,10 +74,93 @@ public static class TtsuMergePlanner
             book.FolderHint,
             binding,
             Logs = work?.Logs.OrderBy(x => x.Id).Select(x => new { x.Id, x.MediaWorkId, x.Date, x.CharactersRead, x.TimeSpentMinutes, x.Source, x.SourceRevision, x.TtsuBindingId }),
-            Days = days
+            Days = days,
+            Progress = progress,
+            work?.TtsuCharacterCount,
+            work?.ManualCharacterCountOverride,
+            work?.JitenCharacterCount
         })));
         return new(work?.Id, work?.Title ?? book.Title, fingerprint, days,
             work?.Logs.Sum(x => (long)x.CharactersRead) ?? 0, work?.Logs.Sum(x => x.TimeSpentMinutes) ?? 0,
-            work is not null && work.MediaType != MediaType.Book ? "Choose a book as the import target." : null);
+            work is not null && work.MediaType != MediaType.Book ? "Choose a book as the import target." : null,
+            progress);
     }
+
+    private static TtsuProgressPlan PlanProgress(MediaWork? work, TtsuBookContainer book,
+        TtsuBinding? binding, string? resolution)
+    {
+        var incoming = TtsuProgressNormalizer.Normalize(book);
+        var existing = binding?.CurrentCharacterPosition is int position &&
+            binding.ProgressFraction is double fraction && binding.TotalInferenceKind is { } inferenceKind
+            ? new TtsuProgressSnapshot(position, fraction, binding.ProgressRevision,
+                work?.TtsuCharacterCount, inferenceKind, binding.ProgressExporterVersion,
+                binding.ProgressDatabaseVersion)
+            : null;
+
+        if (incoming.Count == 0)
+        {
+            return new(existing, incoming, TtsuProgressAction.None, null, null);
+        }
+
+        var next = incoming.Count == 1 ? incoming[0] : null;
+        string? reason = incoming.Count > 1
+            ? "Incoming bookmark revisions disagree: select the reading position to use."
+            : existing is not null && next is not null &&
+                (existing.Revision is null || next.Revision is null) &&
+                (!SameProgressValues(existing, next) || existing.Revision is null && next.Revision is not null)
+                ? "Bookmark revision is unknown: review this progress baseline."
+                : existing is not null && next is not null && existing.Revision == next.Revision &&
+                    !SameProgressValues(existing, next)
+                    ? "The same bookmark revision contains different progress values."
+                    : null;
+
+        if (reason is not null)
+        {
+            if (resolution?.StartsWith("incoming:", StringComparison.Ordinal) == true &&
+                int.TryParse(resolution[9..], out var index) && index >= 0 && index < incoming.Count)
+            {
+                var accepted = incoming[index];
+                var action = existing is null ? TtsuProgressAction.Added :
+                    SameProgressValues(existing, accepted) ? TtsuProgressAction.Unchanged : TtsuProgressAction.Updated;
+                return new(existing, incoming, action, accepted, reason);
+            }
+
+            if (resolution == "keep" && existing is not null)
+            {
+                return new(existing, incoming, TtsuProgressAction.Unchanged, null, reason);
+            }
+
+            return new(existing, incoming, TtsuProgressAction.Conflict, null, reason);
+        }
+
+        if (next is null)
+        {
+            return new(existing, incoming, TtsuProgressAction.None, null, null);
+        }
+        if (existing is null)
+        {
+            return new(null, incoming, TtsuProgressAction.Added, next, null);
+        }
+        if (next.Revision < existing.Revision)
+        {
+            return new(existing, incoming, TtsuProgressAction.Stale, null, null);
+        }
+
+        var nextAction = SameProgressValues(existing, next)
+            ? TtsuProgressAction.Unchanged
+            : TtsuProgressAction.Updated;
+        var revisionAdvanced = next.Revision is long nextRevision &&
+            (existing.Revision is null || nextRevision > existing.Revision.Value);
+        var acceptedNext = (next.Revision is not null || existing.Revision is null) &&
+            (nextAction == TtsuProgressAction.Updated || revisionAdvanced)
+            ? next
+            : null;
+        return new(existing, incoming, nextAction, acceptedNext, null);
+    }
+
+    private static bool SameProgressValues(TtsuProgressSnapshot first, TtsuProgressSnapshot second) =>
+        first.CharacterPosition == second.CharacterPosition &&
+        Math.Abs(first.ProgressFraction - second.ProgressFraction) <= 1e-12 &&
+        first.InferredTotalCharacters == second.InferredTotalCharacters &&
+        first.InferenceKind == second.InferenceKind;
 }

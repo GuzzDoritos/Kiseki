@@ -28,13 +28,16 @@ public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore b
 
     public async Task<IActionResult> OnPostPreviewAsync(CancellationToken cancellationToken)
     {
-        var files = FolderFiles.Where(file => TtsuDataLoader.IsStatisticsFileName(file.FileName)).ToList();
-        if (files.Count is 0 or > 250)
+        var files = FolderFiles.Where(file => TtsuDataLoader.IsStatisticsFileName(file.FileName) ||
+            TtsuDataLoader.IsProgressFileName(file.FileName)).ToList();
+        var statisticsFileCount = files.Count(file => TtsuDataLoader.IsStatisticsFileName(file.FileName));
+        if (statisticsFileCount == 0 || files.Count > 250)
         {
-            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with between 1 and 250 statistics files.");
+            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with statistics files and no more than 250 statistics/progress files.");
             return Page();
         }
         var parsed = new List<TtsuBookContainer>();
+        var progressByFolder = new Dictionary<string, List<TtsuProgressDTO>>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -49,10 +52,20 @@ public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore b
                 await using var stream = file.OpenReadStream();
                 var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 var folder = parts.Length > 1 ? parts[^2] : null;
-                var book = await dataLoader.ParseStatisticsAsync(stream, folder, cancellationToken);
                 // Ignore the chosen root directory, which changes between exports/machines.
-                book.FolderHint = parts.Length > 2 ? string.Join('/', parts.Skip(1).SkipLast(1)) : folder;
-                parsed.Add(book);
+                var folderHint = parts.Length > 2 ? string.Join('/', parts.Skip(1).SkipLast(1)) : folder;
+                if (TtsuDataLoader.IsProgressFileName(path))
+                {
+                    var progress = await dataLoader.ParseProgressAsync(stream, path, cancellationToken);
+                    progressByFolder.TryAdd(folderHint ?? string.Empty, []);
+                    progressByFolder[folderHint ?? string.Empty].Add(progress);
+                }
+                else
+                {
+                    var book = await dataLoader.ParseStatisticsAsync(stream, folder, cancellationToken);
+                    book.FolderHint = folderHint;
+                    parsed.Add(book);
+                }
             }
             catch (Exception exception) when (exception is InvalidDataException or IOException)
             {
@@ -64,7 +77,23 @@ public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore b
             ModelState.AddModelError(nameof(FolderFiles), "None of the detected statistics files could be read.");
             return Page();
         }
-        var batch = batchStore.Store(TtsuStatisticsNormalizer.CombineFiles(parsed));
+        var combined = TtsuStatisticsNormalizer.CombineFiles(parsed).ToList();
+        foreach (var (folderHint, progressEntries) in progressByFolder)
+        {
+            var matches = combined.Where(book => string.Equals(book.FolderHint ?? string.Empty,
+                folderHint, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 1)
+            {
+                matches[0].ProgressEntries.AddRange(progressEntries);
+            }
+            else
+            {
+                Warnings.Add(matches.Count == 0
+                    ? $"Progress in '{folderHint}' was skipped because no statistics file identified its book."
+                    : $"Progress in '{folderHint}' was skipped because multiple book titles made it ambiguous.");
+            }
+        }
+        var batch = batchStore.Store(combined);
         await PopulateAsync(batch, false, cancellationToken);
         return Page();
     }
@@ -101,7 +130,7 @@ public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore b
                 if (input.Mode == TtsuImportMode.Merge && input.TargetId is null)
                     throw new TtsuImportReviewRequiredException("Choose an existing book or explicitly choose Create a new copy.");
                 requests.Add(new(book.Book, input.Mode == TtsuImportMode.Create ? null : input.TargetId,
-                    Resolutions(input), review.Fingerprint, input.OrphanLogIds));
+                    Resolutions(input), review.Fingerprint, input.OrphanLogIds, input.ProgressChoice));
             }
             receipt = await _imports.ApplyAsync(batch.Id, requests, cancellationToken);
             batchStore.Remove(batch.Id);
@@ -149,7 +178,7 @@ public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore b
                 Mode = match.WorkId is null && !match.IsAmbiguous ? TtsuImportMode.Create : TtsuImportMode.Merge
             };
             var plan = await _imports.PreviewAsync(item.Book, input.Mode == TtsuImportMode.Create ? null : input.TargetId,
-                Resolutions(input), input.OrphanLogIds, cancellationToken);
+                Resolutions(input), input.OrphanLogIds, cancellationToken, input.ProgressChoice);
             if (!Enum.IsDefined(input.Mode) || input.Mode == TtsuImportMode.Merge && input.TargetId is null)
                 plan = plan with { Error = "Choose a target book or create a new copy." };
             var choices = Resolutions(input);
@@ -171,9 +200,9 @@ public sealed class TtsuModel(TtsuDataLoader dataLoader, ITtsuImportBatchStore b
 
     private IActionResult Success(TtsuImportReceipt receipt)
     {
-        TempData["LibraryNotice"] = receipt.AddedDays == 0 && receipt.UpdatedDays == 0
-            ? $"Statistics are already up to date. {receipt.StaleDays} older days skipped."
-            : $"Imported {receipt.Books} books: {receipt.AddedDays} new days, {receipt.UpdatedDays} updated days, {receipt.UnchangedDays} unchanged days, {receipt.StaleDays} older days skipped.";
+        TempData["LibraryNotice"] = receipt.AddedDays == 0 && receipt.UpdatedDays == 0 && receipt.ProgressUpdates == 0
+            ? $"Statistics and progress are already up to date. {receipt.StaleDays} older days skipped."
+            : $"Imported {receipt.Books} books: {receipt.AddedDays} new days, {receipt.UpdatedDays} updated days, {receipt.UnchangedDays} unchanged days, {receipt.StaleDays} older days skipped, {receipt.ProgressUpdates} progress updates.";
         return RedirectToPage("/Library/Index");
     }
 }

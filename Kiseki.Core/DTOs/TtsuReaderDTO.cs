@@ -25,4 +25,5 @@ public sealed class TtsuBookContainer
     public string Title { get; set; } = string.Empty;
     public string? FolderHint { get; set; }
     public List<TtsuReaderDTO> Entries { get; set; } = [];
+    public List<TtsuProgressDTO> ProgressEntries { get; set; } = [];
 }

@@ -3,6 +3,7 @@ using System;
 using Kiseki.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Kiseki.Core.Migrations
 {
     [DbContext(typeof(ImmersionDbContext))]
-    partial class ImmersionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915150326_AddTtsuProgressState")]
+    partial class AddTtsuProgressState
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

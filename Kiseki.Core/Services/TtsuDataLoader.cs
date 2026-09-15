@@ -6,6 +6,7 @@ namespace Kiseki.Core.Services;
 public sealed class TtsuDataLoader
 {
     public const string StatisticsFilePrefix = "statistics";
+    public const string ProgressFilePrefix = "progress_";
 
     public async Task<IReadOnlyList<TtsuBookContainer>> LoadDirectoryAsync(
         string rootPath,
@@ -32,14 +33,16 @@ public sealed class TtsuDataLoader
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var statisticsFiles = Directory
+            var sourceFiles = Directory
                 .EnumerateFiles(bookDirectory)
-                .Where(IsStatisticsFileName)
+                .Where(path => IsStatisticsFileName(path) || IsProgressFileName(path))
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
-            foreach (var statisticsFile in statisticsFiles)
+            var folderBooks = new List<TtsuBookContainer>();
+            var progressEntries = new List<TtsuProgressDTO>();
+            foreach (var sourceFile in sourceFiles)
             {
                 await using var stream = new FileStream(
-                    statisticsFile,
+                    sourceFile,
                     FileMode.Open,
                     FileAccess.Read,
                     FileShare.ReadWrite,
@@ -48,20 +51,39 @@ public sealed class TtsuDataLoader
 
                 try
                 {
-                    var book = await ParseStatisticsAsync(
-                        stream,
-                        Path.GetFileName(bookDirectory),
-                        cancellationToken);
-                    book.FolderHint = Path.GetFileName(bookDirectory);
-                    books.Add(book);
+                    if (IsProgressFileName(sourceFile))
+                    {
+                        progressEntries.Add(await ParseProgressAsync(stream, sourceFile, cancellationToken));
+                    }
+                    else
+                    {
+                        var book = await ParseStatisticsAsync(
+                            stream,
+                            Path.GetFileName(bookDirectory),
+                            cancellationToken);
+                        book.FolderHint = Path.GetFileName(bookDirectory);
+                        folderBooks.Add(book);
+                    }
                 }
                 catch (InvalidDataException exception)
                 {
                     throw new InvalidDataException(
-                        $"Could not load TTSU statistics from '{statisticsFile}'. {exception.Message}",
+                        $"Could not load TTSU data from '{sourceFile}'. {exception.Message}",
                         exception);
                 }
             }
+
+            var combinedFolderBooks = TtsuStatisticsNormalizer.CombineFiles(folderBooks);
+            if (progressEntries.Count > 0 && combinedFolderBooks.Count > 1)
+            {
+                throw new InvalidDataException(
+                    $"The TTSU folder '{bookDirectory}' contains multiple book titles, so its progress file is ambiguous.");
+            }
+            if (combinedFolderBooks.Count == 1)
+            {
+                combinedFolderBooks[0].ProgressEntries.AddRange(progressEntries);
+            }
+            books.AddRange(combinedFolderBooks);
         }
         return TtsuStatisticsNormalizer.CombineFiles(books);
     }
@@ -130,6 +152,66 @@ public sealed class TtsuDataLoader
         var normalizedPath = path.Replace('\\', '/');
         var fileName = normalizedPath[(normalizedPath.LastIndexOf('/') + 1)..];
         return fileName.StartsWith(StatisticsFilePrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsProgressFileName(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var normalizedPath = path.Replace('\\', '/');
+        var fileName = normalizedPath[(normalizedPath.LastIndexOf('/') + 1)..];
+        return fileName.StartsWith(ProgressFilePrefix, StringComparison.OrdinalIgnoreCase) &&
+            fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task<TtsuProgressDTO> ParseProgressAsync(
+        Stream jsonStream,
+        string? fileName = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(jsonStream);
+        if (!jsonStream.CanRead)
+        {
+            throw new ArgumentException("The TTSU progress stream must be readable.", nameof(jsonStream));
+        }
+
+        TtsuProgressDTO? progress;
+        try
+        {
+            progress = await JsonSerializer.DeserializeAsync<TtsuProgressDTO>(jsonStream, cancellationToken: cancellationToken);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The file does not contain valid TTSU progress JSON.", exception);
+        }
+
+        if (progress is null)
+        {
+            throw new InvalidDataException("The TTSU progress file was empty.");
+        }
+
+        ApplyProgressFileMetadata(progress, fileName);
+        _ = TtsuProgressNormalizer.Normalize(progress);
+        return progress;
+    }
+
+    private static void ApplyProgressFileMetadata(TtsuProgressDTO progress, string? path)
+    {
+        if (!IsProgressFileName(path))
+        {
+            return;
+        }
+
+        var fileName = Path.GetFileNameWithoutExtension(path!);
+        var parts = fileName.Split('_');
+        if (parts.Length >= 5)
+        {
+            progress.ExporterVersion = int.TryParse(parts[1], out var exporterVersion) ? exporterVersion : null;
+            progress.DatabaseVersion = int.TryParse(parts[2], out var databaseVersion) ? databaseVersion : null;
+        }
     }
 
     private static void ValidateEntry(TtsuReaderDTO entry, int index)

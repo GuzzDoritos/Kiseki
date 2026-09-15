@@ -62,6 +62,15 @@ namespace Kiseki.Core
                 entity.Property(binding => binding.Version).IsConcurrencyToken();
                 entity.HasOne<MediaWork>().WithOne().HasForeignKey<TtsuBinding>(binding => binding.MediaWorkId)
                     .OnDelete(DeleteBehavior.Cascade);
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint("CK_TtsuBindings_CurrentCharacterPosition",
+                        "\"CurrentCharacterPosition\" IS NULL OR \"CurrentCharacterPosition\" >= 0");
+                    table.HasCheckConstraint("CK_TtsuBindings_ProgressFraction",
+                        "\"ProgressFraction\" IS NULL OR (\"ProgressFraction\" >= 0 AND \"ProgressFraction\" <= 1)");
+                    table.HasCheckConstraint("CK_TtsuBindings_ProgressRevision",
+                        "\"ProgressRevision\" IS NULL OR \"ProgressRevision\" >= 0");
+                });
             });
             modelBuilder.Entity<ImmersionLog>(entity =>
             {
@@ -106,9 +115,15 @@ namespace Kiseki.Core
                     .HasForeignKey(work => work.MediaSeriesId)
                     .OnDelete(DeleteBehavior.SetNull);
 
-                entity.ToTable(table => table.HasCheckConstraint(
-                    "CK_MediaWorks_JitenSubdeckRequiresDeck",
-                    "\"JitenSubdeckId\" IS NULL OR \"JitenDeckId\" IS NOT NULL"));
+                entity.ToTable(table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_MediaWorks_JitenSubdeckRequiresDeck",
+                        "\"JitenSubdeckId\" IS NULL OR \"JitenDeckId\" IS NOT NULL");
+                    table.HasCheckConstraint(
+                        "CK_MediaWorks_TtsuCharacterCount",
+                        "\"TtsuCharacterCount\" IS NULL OR \"TtsuCharacterCount\" > 0");
+                });
             });
         }
     }

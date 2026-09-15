@@ -18,6 +18,10 @@ public static class TtsuBookImporter
         ArgumentNullException.ThrowIfNull(work);
         var plan = TtsuMergePlanner.Plan(work, book);
         if (!plan.CanApply) throw new TtsuImportReviewRequiredException("Review conflicting statistics before merging.");
+        if (plan.Progress.Accepted?.InferredTotalCharacters is int inferredTotal)
+        {
+            work.UpdateTtsuCharacterCount(inferredTotal);
+        }
         var added = new List<ImmersionLog>();
         foreach (var day in plan.Days.Where(x => x.Accepted is not null))
         {

@@ -26,7 +26,9 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
             return NotFound();
         }
 
-        Work = MediaWorkDetailsViewModel.Create(work);
+        var binding = await dbContext.TtsuBindings.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.MediaWorkId == id, cancellationToken);
+        Work = MediaWorkDetailsViewModel.Create(work, binding);
         return Page();
     }
 
@@ -83,24 +85,28 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
             return NotFound(new { message = "Work not found." });
         }
 
+        var binding = await dbContext.TtsuBindings.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.MediaWorkId == id, cancellationToken);
         work.ManualCharacterCountOverride = request?.ManualCharacterCount;
         if (work.TotalCharacters > 0)
         {
-            work.IsCompleted = work.CurrentCharactersRead >= work.TotalCharacters;
+            work.IsCompleted = binding?.ProgressFraction is double positionProgress
+                ? positionProgress >= 1
+                : work.CurrentCharactersRead >= work.TotalCharacters;
         }
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var currentCharacters = work.CurrentCharactersRead;
         var totalCharacters = work.TotalCharacters;
-        var progressLabel = totalCharacters > 0
-            ? $"{currentCharacters:N0} / {totalCharacters:N0} characters"
-            : $"{currentCharacters:N0} characters read";
+        var progressLabel = ProgressLabel(work, binding);
 
         var characterTotalSource = work.ManualCharacterCountOverride.HasValue
             ? "Manual override"
-            : work.JitenCharacterCount.HasValue
-                ? "Jiten"
-                : "Not set";
+            : work.TtsuCharacterCount.HasValue
+                ? "TTSU progress"
+                : work.JitenCharacterCount.HasValue
+                    ? "Jiten"
+                    : "Not set";
 
         var statusLabel = work.IsCompleted
             ? "Completed"
@@ -127,8 +133,8 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
             formattedTotalCharacters = totalCharacters > 0 ? totalCharacters.ToString("N0") : "Not set",
             manualOverride = work.ManualCharacterCountOverride,
             characterTotalSource = characterTotalSource,
-            progressPercentage = work.ProgressPercentage,
-            formattedProgressPercentage = work.ProgressPercentage.ToString("N1", System.Globalization.CultureInfo.InvariantCulture),
+            progressPercentage = ReadingProgressPercentage(work, binding),
+            formattedProgressPercentage = ReadingProgressPercentage(work, binding).ToString("N1", System.Globalization.CultureInfo.InvariantCulture),
             progressLabel = progressLabel,
             isCompleted = work.IsCompleted,
             statusLabel = statusLabel,
@@ -149,14 +155,14 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
             return NotFound(new { message = "Work not found." });
         }
 
+        var binding = await dbContext.TtsuBindings.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.MediaWorkId == id, cancellationToken);
         work.IsCompleted = !work.IsCompleted;
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var currentCharacters = work.CurrentCharactersRead;
         var totalCharacters = work.TotalCharacters;
-        var progressLabel = totalCharacters > 0
-            ? $"{currentCharacters:N0} / {totalCharacters:N0} characters"
-            : $"{currentCharacters:N0} characters read";
+        var progressLabel = ProgressLabel(work, binding);
 
         var statusLabel = work.IsCompleted
             ? "Completed"
@@ -182,8 +188,8 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
             isCompleted = work.IsCompleted,
             statusLabel = statusLabel,
             statusCssClass = statusCssClass,
-            progressPercentage = work.ProgressPercentage,
-            formattedProgressPercentage = work.ProgressPercentage.ToString("N1", System.Globalization.CultureInfo.InvariantCulture),
+            progressPercentage = ReadingProgressPercentage(work, binding),
+            formattedProgressPercentage = ReadingProgressPercentage(work, binding).ToString("N1", System.Globalization.CultureInfo.InvariantCulture),
             progressLabel = progressLabel
         });
     }
@@ -242,4 +248,16 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
     {
         public string? CoverUrl { get; set; }
     }
+
+    private static double ReadingProgressPercentage(MediaWork work, TtsuBinding? binding) =>
+        work.IsCompleted ? 100d : binding?.ProgressFraction is double fraction
+            ? Math.Clamp(fraction * 100d, 0d, 100d)
+            : work.ProgressPercentage;
+
+    private static string ProgressLabel(MediaWork work, TtsuBinding? binding) =>
+        binding?.CurrentCharacterPosition is int position && work.TotalCharacters > 0
+            ? $"{position:N0} / {work.TotalCharacters:N0} character position"
+            : work.TotalCharacters > 0
+                ? $"{work.CurrentCharactersRead:N0} / {work.TotalCharacters:N0} characters"
+                : $"{work.CurrentCharactersRead:N0} characters read";
 }

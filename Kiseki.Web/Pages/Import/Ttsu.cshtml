@@ -73,6 +73,43 @@
                         <div><dt>Older skipped</dt><dd>@plan.Count(TtsuDayAction.Stale)</dd></div>
                         <div><dt>Needs review</dt><dd>@plan.Count(TtsuDayAction.Conflict)</dd></div>
                     </dl>
+                    @if (plan.Progress.Existing is not null || plan.Progress.Incoming.Count > 0)
+                    {
+                        <div class="ttsu-merge-totals">
+                            <strong>TTSU reading position</strong>
+                            <p>Status: @plan.Progress.Action</p>
+                            @if (book.CurrentPosition is int position && book.PositionPercentage is double percentage)
+                            {
+                                <p>Position: @position.ToString("N0") characters (@percentage.ToString("N2")%)</p>
+                            }
+                            @if (plan.Progress.ResultingTotalCharacters is int inferredTotal)
+                            {
+                                <p>Inferred book total: @inferredTotal.ToString("N0") characters</p>
+                            }
+                            else
+                            {
+                                <p>The bookmark does not contain a precise ratio from which a total can be inferred.</p>
+                            }
+                        </div>
+                        @if (plan.Progress.ReviewReason is not null)
+                        {
+                            <div class="ttsu-day-resolution">
+                                <label asp-for="Selections[index].ProgressChoice">@plan.Progress.ReviewReason</label>
+                                <select class="form-select" asp-for="Selections[index].ProgressChoice">
+                                    <option value="">Choose the progress state to keep</option>
+                                    @if (plan.Progress.Existing is { } existingProgress)
+                                    {
+                                        <option value="keep">Keep stored: @existingProgress.CharacterPosition.ToString("N0") characters / @((existingProgress.ProgressFraction * 100).ToString("N2"))%</option>
+                                    }
+                                    @for (var progressIndex = 0; progressIndex < plan.Progress.Incoming.Count; progressIndex++)
+                                    {
+                                        var incomingProgress = plan.Progress.Incoming[progressIndex];
+                                        <option value="incoming:@progressIndex">Use incoming: @incomingProgress.CharacterPosition.ToString("N0") characters / @((incomingProgress.ProgressFraction * 100).ToString("N2"))% (revision @(incomingProgress.Revision?.ToString() ?? "unknown"))</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                    }
                     <div class="ttsu-merge-totals">
                         <strong>@plan.TargetTitle</strong>
                         <p>Characters: @plan.CurrentCharacters.ToString("N0") → @plan.ResultCharacters.ToString("N0") (@((plan.ResultCharacters - plan.CurrentCharacters).ToString("+0;-0;0")))</p>

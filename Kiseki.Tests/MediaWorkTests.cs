@@ -46,6 +46,19 @@ public class MediaWorkTests
     }
 
     [Fact]
+    public void TtsuCount_TakesPriorityOverJitenAndManualStillWins()
+    {
+        var work = new MediaWork("Book");
+        work.LinkToJitenDeck(1, 110_000);
+
+        work.UpdateTtsuCharacterCount(100_000);
+
+        Assert.Equal(100_000, work.TotalCharacters);
+        work.ManualCharacterCountOverride = 90_000;
+        Assert.Equal(90_000, work.TotalCharacters);
+    }
+
+    [Fact]
     public void RemoveJitenLink_ClearsAllExternalValues()
     {
         var work = new MediaWork("Book");

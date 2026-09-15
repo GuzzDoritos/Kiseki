@@ -56,7 +56,7 @@ Franchise (e.g. "Re:Zero")
    - Represents a single trackable library item (a volume, game, or anime season).
    - Currently focused on `MediaType.Book`.
    - **Progress & Character Count Calculation**:
-     - `TotalCharacters = ManualCharacterCountOverride ?? JitenCharacterCount ?? 0`
+     - `TotalCharacters = ManualCharacterCountOverride ?? TtsuCharacterCount ?? JitenCharacterCount ?? 0`
      - `CurrentCharactersRead = Logs.Sum(l => l.CharactersRead)`
      - `ProgressPercentage`: If `IsCompleted == true`, progress is **100%**. If `TotalCharacters == 0`, progress is **0%**. Otherwise: `Math.Min(100.0, (CurrentCharactersRead / TotalCharacters) * 100.0)`.
    - **Jiten Linking**:
@@ -100,14 +100,15 @@ Franchise (e.g. "Re:Zero")
 ## 4. Integrations & External Data Flows
 
 ### TTSU Reading Ingestion
-- **Formats**: TTSU exports per-book JSON files (`statistics*.json`).
+- **Formats**: TTSU exports per-book daily statistics (`statistics*.json`) and bookmark state (`progress_*.json`). Statistics are activity; bookmark position/progress and the inferred TTSU book length are separate source state.
 - **Key Pipeline**:
-  1. `TtsuDataLoader`: Reads directory or input stream, deserializes `TtsuReaderDTO`, validates `yyyy-MM-dd` dates, character counts, and durations.
+  1. `TtsuDataLoader`: Reads directory or input stream, deserializes `TtsuReaderDTO` and `TtsuProgressDTO`, validates daily values and bookmark position/progress, and associates progress with the statistics-identified book in the same folder.
   2. `TtsuSessionMapper`: Converts reading time from seconds to minutes (`readingTime / 60d`).
   3. `TtsuStatisticsNormalizer` reconciles multiple files within one source folder/title per day. Newest known revisions win; unknown revisions and conflicting ties remain reviewable candidates.
-  4. `TtsuMergePlanner` produces immutable daily decisions and before/after totals. `TtsuImportService` owns matching, tracked mutations, serializable commits, and durable operation receipts for both Web and Console.
+  4. `TtsuMergePlanner` produces immutable daily and bookmark decisions plus before/after totals. Modern numeric bookmark ratios infer the exact TTSU character count; rounded legacy percentage strings remain non-authoritative. `TtsuImportService` owns matching, tracked mutations, serializable commits, and durable operation receipts.
      - `ImmersionLog.SourceRevision` preserves source modification timestamps. Legacy rows start unknown; reviewed baseline adoption preserves IDs. Missing dates and non-TTSU logs are retained.
      - `TtsuBinding` uses the work ID as its key, stores the original normalized source title/folder hint, and carries a concurrency token. A unique `(TtsuBindingId, Date)` index applies to bound daily rows; a check constraint enforces source/work consistency.
+     - The binding also stores the latest accepted bookmark position, fraction, revision, and TTSU format versions. `MediaWork.TtsuCharacterCount` stores the inferred edition-specific total without overwriting Jiten metadata or a manual override.
      - Match persisted source hints before suggesting normalized-title candidates. Ambiguity requires explicit selection; source renames/moves are not globally identifiable.
      - Duplicate legacy days and orphan-log assignments require explicit review. Never sum duplicate snapshots or choose a winner silently.
      - `TtsuBookImporter` remains a convenience for conflict-free in-memory creation/merge; interactive/persistent imports use `TtsuImportService`.

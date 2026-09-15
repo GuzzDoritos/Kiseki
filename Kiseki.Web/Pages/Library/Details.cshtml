@@ -2,15 +2,19 @@
 @model Kiseki.Web.Pages.Library.DetailsModel
 @{
     ViewData["Title"] = Model.Work.Title;
-    var progressLabel = Model.Work.TotalCharacters > 0
-        ? $"{Model.Work.CharactersRead:N0} / {Model.Work.TotalCharacters:N0} characters"
-        : $"{Model.Work.CharactersRead:N0} characters read";
+    var progressCurrent = Model.Work.CurrentCharacterPosition ?? Model.Work.CharactersRead;
+    var progressLabel = Model.Work.CurrentCharacterPosition is int position && Model.Work.TotalCharacters > 0
+        ? $"{position:N0} / {Model.Work.TotalCharacters:N0} character position"
+        : Model.Work.TotalCharacters > 0
+            ? $"{Model.Work.CharactersRead:N0} / {Model.Work.TotalCharacters:N0} characters"
+            : $"{Model.Work.CharactersRead:N0} characters read";
     var progress = new ProgressBarViewModel(
-        Model.Work.CharactersRead,
+        progressCurrent,
         Model.Work.TotalCharacters,
         progressLabel,
         Model.Work.IsCompleted,
-        Model.Work.TotalCharacters > 0 || Model.Work.IsCompleted);
+        Model.Work.TotalCharacters > 0 || Model.Work.IsCompleted,
+        Model.Work.PositionProgressPercentage);
 }
 
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
@@ -115,6 +119,10 @@
 
                 <dl class="detail-stat-grid">
                     <div><dt>Characters read</dt><dd data-characters-read="@Model.Work.CharactersRead">@Model.Work.CharactersRead.ToString("N0")</dd></div>
+                    @if (Model.Work.CurrentCharacterPosition is int currentPosition)
+                    {
+                        <div><dt>Current position</dt><dd>@currentPosition.ToString("N0")</dd></div>
+                    }
                     <div>
                         <dt>Character total</dt>
                         <dd class="inline-edit-wrapper stat-inline-wrapper"
@@ -161,6 +169,10 @@
             @if (Model.Work.JitenCharacterCount is int jitenCharacters)
             {
                 <div><dt>Jiten characters</dt><dd>@jitenCharacters.ToString("N0")</dd></div>
+            }
+            @if (Model.Work.TtsuCharacterCount is int ttsuCharacters)
+            {
+                <div><dt>TTSU characters</dt><dd>@ttsuCharacters.ToString("N0")</dd></div>
             }
             @if (Model.Work.ManualCharacterCountOverride is int manualCharacters)
             {

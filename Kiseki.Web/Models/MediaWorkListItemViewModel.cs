@@ -12,8 +12,12 @@ public sealed record MediaWorkListItemViewModel(
     string? CoverUrl,
     bool IsJitenLinked,
     bool IsCompleted,
-    int SessionCount)
+    int SessionCount,
+    int? CurrentCharacterPosition = null,
+    double? PositionProgressPercentage = null)
 {
+    public int ProgressCurrent => CurrentCharacterPosition ?? CharactersRead;
+
     public string StatusLabel => IsCompleted
         ? "Completed"
         : CharactersRead > 0

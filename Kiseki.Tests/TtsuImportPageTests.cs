@@ -251,6 +251,32 @@ public sealed class TtsuImportPageTests
         Assert.Equal(preview.CharactersRead, await database.Context.ImmersionLogs.SumAsync(x => (long)x.CharactersRead));
     }
 
+    [Fact]
+    public async Task PreviewAndConfirm_ImportProgressFromTheSameBookFolder()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var statistics = File.OpenRead(GetFixturePath());
+        using var progress = new MemoryStream(Encoding.UTF8.GetBytes(
+            "{\"dataId\":7,\"exploredCharCount\":25000,\"progress\":0.25,\"lastBookmarkModified\":1234}"));
+        var model = CreateModel(database.Context);
+        model.FolderFiles =
+        [
+            StatisticsFile(statistics),
+            ProgressFile(progress)
+        ];
+
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        var preview = Assert.Single(model.Books);
+        Assert.Equal(25_000, preview.CurrentPosition);
+        Assert.Equal(100_000, preview.Plan.Progress.ResultingTotalCharacters);
+        await model.OnPostConfirmAsync(CancellationToken.None);
+
+        database.Context.ChangeTracker.Clear();
+        Assert.Equal(100_000, (await database.Context.MediaWorks.SingleAsync()).TtsuCharacterCount);
+        Assert.Equal(25_000, (await database.Context.TtsuBindings.SingleAsync()).CurrentCharacterPosition);
+    }
+
     private static TtsuModel CreateModel(ImmersionDbContext context)
     {
         var httpContext = new DefaultHttpContext();
@@ -275,6 +301,16 @@ public sealed class TtsuImportPageTests
             stream.Length,
             "FolderFiles",
             $"ttu-reader-data/{folderTitle}/statistics.json");
+    }
+
+    private static FormFile ProgressFile(Stream stream, string folderTitle = "Test Book")
+    {
+        return new FormFile(
+            stream,
+            0,
+            stream.Length,
+            "FolderFiles",
+            $"ttu-reader-data/{folderTitle}/progress_1_6_1234_0.25.json");
     }
 
     private static string GetFixturePath()

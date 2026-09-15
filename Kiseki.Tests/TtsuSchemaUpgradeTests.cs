@@ -18,11 +18,24 @@ public sealed class TtsuSchemaUpgradeTests
             DROP TABLE "ImmersionLogs";
             DROP TABLE "TtsuBindings";
             DROP TABLE "TtsuImportReceipts";
+            CREATE TABLE "TtsuBindings" (
+                "MediaWorkId" TEXT NOT NULL PRIMARY KEY REFERENCES "MediaWorks" ("Id") ON DELETE CASCADE,
+                "OriginalTitle" TEXT NOT NULL, "FolderHint" TEXT NULL, "Version" TEXT NOT NULL);
+            CREATE TABLE "TtsuImportReceipts" (
+                "Id" TEXT NOT NULL PRIMARY KEY, "Books" INTEGER NOT NULL,
+                "AddedDays" INTEGER NOT NULL, "UpdatedDays" INTEGER NOT NULL,
+                "UnchangedDays" INTEGER NOT NULL, "StaleDays" INTEGER NOT NULL);
             CREATE TABLE "ImmersionLogs" (
                 "Id" TEXT NOT NULL PRIMARY KEY, "Date" TEXT NOT NULL,
                 "CharactersRead" INTEGER NOT NULL, "TimeSpentMinutes" REAL NOT NULL,
                 "Source" TEXT NOT NULL, "MediaWorkId" TEXT NULL REFERENCES "MediaWorks" ("Id"));
             """);
+        var bindingVersion = Guid.NewGuid();
+        var receiptId = Guid.NewGuid();
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"TtsuBindings\" VALUES ({work.Id}, {"LEGACY BOOK"}, {"Legacy book"}, {bindingVersion})");
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"TtsuImportReceipts\" VALUES ({receiptId}, {1}, {1}, {0}, {0}, {0})");
         var first = Guid.NewGuid(); var second = Guid.NewGuid(); var orphan = Guid.NewGuid();
         foreach (var id in new[] { first, second, orphan })
         {
@@ -36,6 +49,14 @@ public sealed class TtsuSchemaUpgradeTests
         Assert.Equal(3, logs.Count);
         Assert.All(logs, x => { Assert.Null(x.SourceRevision); Assert.Null(x.TtsuBindingId); });
         Assert.Equal(2, logs.Count(x => x.MediaWorkId == work.Id));
+        var upgradedWork = await db.Context.MediaWorks.SingleAsync();
+        var upgradedBinding = await db.Context.TtsuBindings.SingleAsync();
+        var upgradedReceipt = await db.Context.TtsuImportReceipts.SingleAsync();
+        Assert.Null(upgradedWork.TtsuCharacterCount);
+        Assert.Equal(bindingVersion, upgradedBinding.Version);
+        Assert.Null(upgradedBinding.ProgressFraction);
+        Assert.Equal(0, upgradedReceipt.ProgressUpdates);
+        Assert.Equal(0, upgradedReceipt.CharacterTotalUpdates);
         Assert.Single(await db.Service.GetOrphansAsync());
         Assert.False((await db.Service.PreviewAsync(TtsuMergeServiceTests.Book(), work.Id)).CanApply);
     }

@@ -64,9 +64,16 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
             .OrderBy(work => work.IsCompleted)
             .ThenBy(work => work.Title)
             .ToListAsync();
+        var workIds = works.Select(work => work.Id).ToList();
+        var bindings = await dbContext.TtsuBindings.AsNoTracking()
+            .Where(binding => workIds.Contains(binding.MediaWorkId))
+            .ToDictionaryAsync(binding => binding.MediaWorkId);
 
         Works = works
-            .Select(work => new MediaWorkListItemViewModel(
+            .Select(work =>
+            {
+                bindings.TryGetValue(work.Id, out var binding);
+                return new MediaWorkListItemViewModel(
                 work.Id,
                 work.Title,
                 work.MediaSeries?.Title,
@@ -76,7 +83,10 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
                 work.JitenCoverUrl,
                 work.HasJitenLink,
                 work.IsCompleted,
-                work.Logs.Count))
+                work.Logs.Count,
+                binding?.CurrentCharacterPosition,
+                binding?.ProgressFraction * 100d);
+            })
             .ToList();
     }
 }

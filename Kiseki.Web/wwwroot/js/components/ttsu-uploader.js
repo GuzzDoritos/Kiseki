@@ -1,6 +1,6 @@
 /**
  * Initializes TTSU directory upload handling.
- * Filters selected folder files to those beginning with "statistics" (case-insensitive)
+ * Filters selected folder files to TTSU statistics and progress JSON files
  * and updates the selection summary text.
  */
 export function initTtsuFolderInput() {
@@ -11,7 +11,12 @@ export function initTtsuFolderInput() {
 
     ttsuFolderInput.addEventListener('change', () => {
         const selectedFiles = Array.from(ttsuFolderInput.files ?? []);
-        const statisticsFiles = selectedFiles.filter(file =>
+        const sourceFiles = selectedFiles.filter(file => {
+            const name = file.name.toLowerCase();
+            return name.startsWith('statistics') ||
+                (name.startsWith('progress_') && name.endsWith('.json'));
+        });
+        const statisticsFiles = sourceFiles.filter(file =>
             file.name.toLowerCase().startsWith('statistics'));
 
         if (selectionSummary) {
@@ -19,7 +24,9 @@ export function initTtsuFolderInput() {
                 selectionSummary.textContent = 'No statistics files were found in that folder.';
             } else {
                 const suffix = statisticsFiles.length === 1 ? 'file' : 'files';
-                selectionSummary.textContent = `${statisticsFiles.length} statistics ${suffix} ready to preview.`;
+                const progressCount = sourceFiles.length - statisticsFiles.length;
+                const progressSummary = progressCount === 0 ? '' : ` and ${progressCount} progress ${progressCount === 1 ? 'file' : 'files'}`;
+                selectionSummary.textContent = `${statisticsFiles.length} statistics ${suffix}${progressSummary} ready to preview.`;
             }
         }
 
@@ -29,7 +36,7 @@ export function initTtsuFolderInput() {
 
         try {
             const filteredFiles = new DataTransfer();
-            statisticsFiles.forEach(file => filteredFiles.items.add(file));
+            sourceFiles.forEach(file => filteredFiles.items.add(file));
             ttsuFolderInput.files = filteredFiles.files;
         } catch {
             // The server also filters uploads, so older browsers can submit the original selection.

@@ -38,18 +38,30 @@ public class MediaWork
 
     // Character Counts
     public int? JitenCharacterCount { get; set; }
+    public int? TtsuCharacterCount { get; private set; }
     public int? ManualCharacterCountOverride { get; set; }
 
     public bool HasJitenLink => JitenDeckId.HasValue;
     public bool IsLinkedToJitenSubdeck => JitenSubdeckId.HasValue;
 
-    // The effective count uses the manual override if provided, otherwise Jiten's count
-    public int TotalCharacters => ManualCharacterCountOverride ?? JitenCharacterCount ?? 0;
+    // TTSU reflects the exact imported ebook; Jiten remains the metadata fallback.
+    public int TotalCharacters => ManualCharacterCountOverride ?? TtsuCharacterCount ?? JitenCharacterCount ?? 0;
 
     // Status Override
     public bool IsCompleted { get; set; }
 
     public List<ImmersionLog> Logs { get; set; } = new();
+
+    public void UpdateTtsuCharacterCount(int characterCount)
+    {
+        if (characterCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(characterCount), "TTSU character count must be positive.");
+        }
+
+        TtsuCharacterCount = characterCount;
+    }
 
     public void LinkToJitenDeck(
         int deckId,

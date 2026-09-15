@@ -183,6 +183,88 @@ public sealed class TtsuMergeServiceTests
     }
 
     [Fact]
+    public async Task ProgressImport_StoresPositionAndUsesInferredTtsuTotal()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var book = Book(Entry(10_000, 1));
+        book.ProgressEntries.Add(Progress(25_000, 0.25, 10));
+
+        var receipt = await Apply(db.Service, book);
+
+        db.Context.ChangeTracker.Clear();
+        var work = await db.Context.MediaWorks.SingleAsync();
+        var binding = await db.Context.TtsuBindings.SingleAsync();
+        Assert.Equal(100_000, work.TtsuCharacterCount);
+        Assert.Equal(100_000, work.TotalCharacters);
+        Assert.Equal(25_000, binding.CurrentCharacterPosition);
+        Assert.Equal(0.25, binding.ProgressFraction);
+        Assert.Equal(10, binding.ProgressRevision);
+        Assert.Equal(1, receipt.ProgressUpdates);
+        Assert.Equal(1, receipt.CharacterTotalUpdates);
+
+        var repeated = await Apply(db.Service, book, work.Id);
+        Assert.Equal(0, repeated.ProgressUpdates);
+        Assert.Equal(0, repeated.CharacterTotalUpdates);
+    }
+
+    [Fact]
+    public async Task ProgressImport_SkipsOlderBookmarkAndManualTotalKeepsPriority()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var first = Book();
+        first.ProgressEntries.Add(Progress(25_000, 0.25, 10));
+        await Apply(db.Service, first);
+        var work = await db.Context.MediaWorks.SingleAsync();
+        work.ManualCharacterCountOverride = 90_000;
+        await db.Context.SaveChangesAsync();
+
+        var stale = Book();
+        stale.ProgressEntries.Add(Progress(40_000, 0.2, 9));
+        var preview = await db.Service.PreviewAsync(stale, work.Id);
+        var receipt = await db.Service.ApplyAsync(Guid.NewGuid(),
+            [new(stale, work.Id, new Dictionary<DateOnly, string>(), preview.Fingerprint)]);
+
+        db.Context.ChangeTracker.Clear();
+        work = await db.Context.MediaWorks.SingleAsync();
+        var binding = await db.Context.TtsuBindings.SingleAsync();
+        Assert.Equal(TtsuProgressAction.Stale, preview.Progress.Action);
+        Assert.Equal(25_000, binding.CurrentCharacterPosition);
+        Assert.Equal(100_000, work.TtsuCharacterCount);
+        Assert.Equal(90_000, work.TotalCharacters);
+        Assert.Equal(0, receipt.ProgressUpdates);
+    }
+
+    [Fact]
+    public async Task ProgressImport_SameRevisionConflictRequiresExplicitChoice()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var baseline = Book();
+        baseline.ProgressEntries.Add(Progress(25_000, 0.25, 10));
+        await Apply(db.Service, baseline);
+        var workId = (await db.Context.MediaWorks.SingleAsync()).Id;
+
+        var conflicting = Book();
+        conflicting.ProgressEntries.Add(Progress(30_000, 0.3, 10));
+        var unresolved = await db.Service.PreviewAsync(conflicting, workId);
+
+        Assert.False(unresolved.CanApply);
+        Assert.Equal(TtsuProgressAction.Conflict, unresolved.Progress.Action);
+
+        var reviewed = await db.Service.PreviewAsync(
+            conflicting,
+            workId,
+            progressResolution: "incoming:0");
+        await db.Service.ApplyAsync(Guid.NewGuid(),
+            [new(conflicting, workId, new Dictionary<DateOnly, string>(), reviewed.Fingerprint,
+                ProgressResolution: "incoming:0")]);
+
+        db.Context.ChangeTracker.Clear();
+        var binding = await db.Context.TtsuBindings.SingleAsync();
+        Assert.Equal(30_000, binding.CurrentCharacterPosition);
+        Assert.Equal(0.3, binding.ProgressFraction);
+    }
+
+    [Fact]
     public void MultipleFiles_UnionDailyRevisionsAndExposeConflictingTies()
     {
         var first = Book(Entry(10, 1), Entry(20, 4, "2026-09-02"));
@@ -210,6 +292,14 @@ public sealed class TtsuMergeServiceTests
     internal static TtsuBookContainer Book(params TtsuReaderDTO[] entries) => new() { Title = "Book", FolderHint = "Book", Entries = [.. entries] };
     internal static TtsuReaderDTO Entry(int characters, long? revision, string date = "2026-09-01") =>
         new() { Title = "Book", DateKey = date, CharactersRead = characters, ReadingTime = 60, LastStatisticModified = revision };
+    internal static TtsuProgressDTO Progress(int position, double fraction, long? revision) => new()
+    {
+        ExploredCharacterCount = position,
+        Progress = System.Text.Json.JsonSerializer.SerializeToElement(fraction),
+        LastBookmarkModified = revision,
+        ExporterVersion = 1,
+        DatabaseVersion = 6
+    };
     internal static async Task<TtsuImportReceipt> Apply(TtsuImportService service, TtsuBookContainer book, Guid? id = null, Dictionary<DateOnly, string>? resolutions = null)
     {
         resolutions ??= [];
