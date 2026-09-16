@@ -55,14 +55,15 @@ public class IndexModel(ImmersionDbContext dbContext) : PageModel
             .AsNoTracking()
             .CountAsync(work => !work.IsCompleted && work.Logs.Any(l => l.CharactersRead > 0), cancellationToken);
 
-        // Aggregate daily character totals across all logs for the activity heatmap
+        // Aggregate daily character totals and time across all logs for the activity heatmap
         var heatmapLogs = await dbContext.ImmersionLogs
             .AsNoTracking()
             .GroupBy(log => log.Date)
             .Select(g => new
             {
                 Date = g.Key,
-                Value = g.Sum(l => l.CharactersRead)
+                Value = g.Sum(l => l.CharactersRead),
+                TimeMinutes = g.Sum(l => l.TimeSpentMinutes)
             })
             .OrderBy(x => x.Date)
             .ToListAsync(cancellationToken);
@@ -71,7 +72,8 @@ public class IndexModel(ImmersionDbContext dbContext) : PageModel
             heatmapLogs.Select(x => new
             {
                 date = x.Date.ToString("yyyy-MM-dd"),
-                value = x.Value
+                value = x.Value,
+                timeMinutes = x.TimeMinutes
             }));
 
         var years = heatmapLogs
