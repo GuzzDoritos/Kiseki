@@ -1,15 +1,17 @@
 using Kiseki.Core;
 using Kiseki.Core.Entities;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Kiseki.Web.Models;
-using System.ComponentModel;
 
 namespace Kiseki.Web.Pages.Library;
 
 public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
 {
+    private const string ViewCookieName = "kiseki_library_view";
+
     public IReadOnlyList<MediaWorkListItemViewModel> Works { get; private set; } = [];
     public int TotalCount { get; private set; }
 
@@ -23,7 +25,7 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
     public string? Status { get; set; }
 
     [BindProperty(SupportsGet = true)]
-    public string? View { get; set; } = "list";
+    public string? View { get; set; }
 
     public async Task OnGetAsync()
     {
@@ -32,6 +34,34 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
         if (Status is not ("in-progress" or "not-started" or "completed"))
         {
             Status = null;
+        }
+
+        if (HttpContext is not null)
+        {
+            if (Request.Query.TryGetValue("View", out var requestedView) && !string.IsNullOrWhiteSpace(requestedView))
+            {
+                var normalized = requestedView.ToString().Trim().ToLowerInvariant();
+                View = normalized is ("grid" or "list") ? normalized : "list";
+                Response.Cookies.Append(ViewCookieName, View, new CookieOptions
+                {
+                    Expires = DateTimeOffset.UtcNow.AddYears(1),
+                    SameSite = SameSiteMode.Lax,
+                    IsEssential = true
+                });
+            }
+            else if (Request.Cookies.TryGetValue(ViewCookieName, out var savedView) && !string.IsNullOrWhiteSpace(savedView))
+            {
+                var normalized = savedView.Trim().ToLowerInvariant();
+                View = normalized is ("grid" or "list") ? normalized : "list";
+            }
+            else
+            {
+                View = "list";
+            }
+        }
+        else
+        {
+            View = View is ("grid" or "list") ? View : "list";
         }
 
         TotalCount = await dbContext.MediaWorks.CountAsync();
@@ -74,18 +104,18 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
             {
                 bindings.TryGetValue(work.Id, out var binding);
                 return new MediaWorkListItemViewModel(
-                work.Id,
-                work.Title,
-                work.MediaSeries?.Title,
-                work.MediaType,
-                work.CurrentCharactersRead,
-                work.TotalCharacters,
-                work.JitenCoverUrl,
-                work.HasJitenLink,
-                work.IsCompleted,
-                work.Logs.Count,
-                binding?.CurrentCharacterPosition,
-                binding?.ProgressFraction * 100d);
+                    work.Id,
+                    work.Title,
+                    work.MediaSeries?.Title,
+                    work.MediaType,
+                    work.CurrentCharactersRead,
+                    work.TotalCharacters,
+                    work.JitenCoverUrl,
+                    work.HasJitenLink,
+                    work.IsCompleted,
+                    work.Logs.Count,
+                    binding?.CurrentCharacterPosition,
+                    binding?.ProgressFraction * 100d);
             })
             .ToList();
     }

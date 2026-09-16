@@ -29,6 +29,10 @@
                 {
                     <input type="hidden" name="Status" value="@Model.Status" />
                 }
+                @if (Model.View is not null)
+                {
+                    <input type="hidden" name="View" value="@Model.View" />
+                }
                 <label class="visually-hidden" for="library-search">Search library</label>
                 <svg aria-hidden="true" viewBox="0 0 16 16">
                     <circle cx="7" cy="7" r="4.5"></circle>
@@ -48,19 +52,43 @@
             <a class="filter-tab @TypeTabClass(null)"
                asp-page="/Library/Index"
                asp-route-search="@Model.Search"
-               asp-route-status="@Model.Status">All</a>
+               asp-route-status="@Model.Status"
+               asp-route-view="@Model.View">All</a>
             @foreach (var type in Enum.GetValues<MediaType>())
             {
                 <a class="filter-tab @TypeTabClass(type)"
                    asp-page="/Library/Index"
                    asp-route-search="@Model.Search"
                    asp-route-status="@Model.Status"
-                   asp-route-type="@type">@(type == MediaType.Book ? "Books" 
-                                            : type == MediaType.Game ? "Games" 
-                                            : type.ToString())
+                   asp-route-type="@type"
+                   asp-route-view="@Model.View">@(type == MediaType.Book ? "Books" 
+                                             : type == MediaType.Game ? "Games" 
+                                             : type.ToString())
                 </a>
             }
         </nav>
+
+        <form class="view-filter" method="get">
+            @if (Model.Type is not null)
+            {
+                <input type="hidden" name="Type" value="@Model.Type" />
+            }
+            @if (Model.Search is not null)
+            {
+                <input type="hidden" name="Search" value="@Model.Search" />
+            }
+            @if (Model.Status is not null)
+            {
+                <input type="hidden" name="Status" value="@Model.Status" />
+            }
+            <div class="btn-group btn-group-sm heatmap-mode-group" role="group" aria-label="Select view mode">
+                <input type="radio" class="btn-check" name="View" id="viewList" value="list" checked="@(Model.View != "grid")" onchange="this.form.submit()" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="viewList">List</label>
+
+                <input type="radio" class="btn-check" name="View" id="viewGrid" value="grid" checked="@(Model.View == "grid")" onchange="this.form.submit()" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="viewGrid">Grid</label>
+            </div>
+        </form>
 
         <form class="status-filter" method="get">
             @if (Model.Type is not null)
@@ -70,6 +98,10 @@
             @if (Model.Search is not null)
             {
                 <input type="hidden" name="Search" value="@Model.Search" />
+            }
+            @if (Model.View is not null)
+            {
+                <input type="hidden" name="View" value="@Model.View" />
             }
             <label class="visually-hidden" for="library-status">Filter by status</label>
             <select id="library-status" name="Status" onchange="this.form.submit()">
@@ -92,6 +124,15 @@
                     }
                 </div>
             }
+            else if (Model.View == "grid")
+            {
+                <div class="media-grid">
+                    @foreach (var work in Model.Works)
+                    {
+                        <partial name="_MediaWorkCard" model="work" />
+                    }
+                </div>
+            }
             
         }
         else
@@ -107,7 +148,7 @@
                 {
                     <h2>No matching works</h2>
                     <p>Nothing in your library matches these filters.</p>
-                    <a class="secondary-action" asp-page="/Library/Index">Clear filters</a>
+                    <a class="secondary-action" asp-page="/Library/Index" asp-route-view="@Model.View">Clear filters</a>
                 }
             </div>
         }

@@ -1,0 +1,65 @@
+@model MediaWorkListItemViewModel
+@{
+    var progressLabel = Model.CurrentCharacterPosition is int position && Model.TotalCharacters > 0
+        ? $"{position:N0} / {Model.TotalCharacters:N0} ch position"
+        : Model.TotalCharacters > 0
+            ? $"{Model.CharactersRead:N0} / {Model.TotalCharacters:N0} ch"
+            : $"{Model.CharactersRead:N0} ch";
+    var progress = new ProgressBarViewModel(
+        Model.ProgressCurrent,
+        Model.TotalCharacters,
+        progressLabel,
+        Model.IsCompleted,
+        false,
+        Model.PositionProgressPercentage);
+}
+
+<article class="media-card">
+    <a class="media-card-link" asp-page="/Library/Details" asp-route-id="@Model.Id">
+        <div class="media-card-cover media-cover-@Model.MediaType.ToString().ToLowerInvariant() @(Model.CoverUrl is not null ? "has-image" : string.Empty)"
+             aria-hidden="true"
+             data-cover-frame>
+            @if (Model.CoverUrl is not null)
+            {
+                <img class="media-card-cover-image"
+                     src="@Model.CoverUrl"
+                     alt=""
+                     loading="lazy"
+                     referrerpolicy="no-referrer"
+                     data-cover-image />
+            }
+            <span data-cover-fallback hidden="@(Model.CoverUrl is not null ? "hidden" : null)">@Model.TypeToJapanese</span>
+        </div>
+
+        <div class="media-card-body">
+            <div class="media-card-header">
+                <span class="media-card-title" title="@Model.Title">@Model.Title</span>
+                <span class="media-card-series" title="@(Model.SeriesTitle ?? "Standalone")">@(Model.SeriesTitle ?? "Standalone")</span>
+            </div>
+
+            <div class="media-tags">
+                <span class="media-type-tag">@Model.MediaType</span>
+                @if (Model.IsJitenLinked)
+                {
+                    <span class="source-tag"><i></i>Jiten</span>
+                }
+                @if (Model.SessionCount > 0)
+                {
+                    <span class="source-tag"><i></i>TTSU &times;@Model.SessionCount</span>
+                }
+            </div>
+
+            <div class="media-card-progress">
+                <partial name="_ProgressBar" model="progress" />
+            </div>
+
+            <div class="media-card-footer">
+                <span class="media-status media-status-@Model.StatusCssClass">
+                    <i aria-hidden="true"></i>
+                    @Model.StatusLabel
+                </span>
+            </div>
+        </div>
+    </a>
+</article>
+
