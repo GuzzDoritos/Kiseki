@@ -70,7 +70,8 @@ public sealed record MediaWorkDetailsViewModel(
                 log.Id,
                 log.Date,
                 log.CharactersRead,
-                log.TimeSpentMinutes))
+                log.TimeSpentMinutes,
+                log.Source))
             .ToList();
 
         return new MediaWorkDetailsViewModel(
@@ -97,9 +98,14 @@ public sealed record ImmersionLogViewModel(
     Guid Id,
     DateOnly Date,
     int CharactersRead,
-    double TimeSpentMinutes)
+    double TimeSpentMinutes,
+    string Source)
 {
     public string TimeSpentLabel => FormatDuration(TimeSpentMinutes);
+
+    public string SourceLabel => string.IsNullOrWhiteSpace(Source)
+        ? "Unknown"
+        : Source.Trim().ToUpperInvariant();
 
     public static string FormatDuration(double minutes)
     {
