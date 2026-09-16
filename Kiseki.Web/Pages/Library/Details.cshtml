@@ -4,7 +4,7 @@
     ViewData["Title"] = Model.Work.Title;
     var progressCurrent = Model.Work.CurrentCharacterPosition ?? Model.Work.CharactersRead;
     var progressLabel = Model.Work.CurrentCharacterPosition is int position && Model.Work.TotalCharacters > 0
-        ? $"{position:N0} / {Model.Work.TotalCharacters:N0} character position"
+        ? $"{position:N0} / {Model.Work.TotalCharacters:N0}"
         : Model.Work.TotalCharacters > 0
             ? $"{Model.Work.CharactersRead:N0} / {Model.Work.TotalCharacters:N0} characters"
             : $"{Model.Work.CharactersRead:N0} characters read";
@@ -18,9 +18,7 @@
 }
 
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
-    <a asp-page="/Library/Index">Library</a>
-    <span>/</span>
-    <span data-breadcrumb-title>@Model.Work.Title</span>
+    <a asp-page="/Library/Index">← Library</a>
 </nav>
 
 <form id="antiforgeryForm" method="post" class="d-none">
@@ -34,7 +32,6 @@
 
 <div class="page-header">
     <div>
-        <span class="media-badge">@Model.Work.MediaType</span>
         <div class="inline-edit-wrapper title-edit-wrapper"
              data-inline-edit="title"
              data-url="@Url.Page("/Library/Details", "UpdateTitle", new { id = Model.Work.Id })">
@@ -64,17 +61,7 @@
             </h1>
             <div class="inline-edit-error" data-inline-error role="alert" aria-live="polite" hidden></div>
         </div>
-        <div class="page-status-wrap">
-            <button type="button"
-                    class="media-status media-status-@Model.Work.StatusCssClass status-toggle-badge"
-                    data-status-toggle
-                    data-url="@Url.Page("/Library/Details", "ToggleStatus", new { id = Model.Work.Id })"
-                    title="Click to toggle status between Reading and Completed"
-                    aria-label="Status: @Model.Work.StatusLabel. Click to toggle.">
-                <i aria-hidden="true"></i>
-                <span data-status-text>@Model.Work.StatusLabel</span>
-            </button>
-        </div>
+
     </div>
     <div class="page-actions">
         @if (Model.Work.MediaType == MediaType.Book)
@@ -114,15 +101,23 @@
             </div>
 
             <div class="detail-progress">
-                <h2>Immersion progress</h2>
+                <div class="detail-heading">
+                    <h2>Progress</h2>
+                    <div class="page-status-wrap">
+                        <button type="button"
+                                class="media-status media-status-@Model.Work.StatusCssClass status-toggle-badge"
+                                data-status-toggle
+                                data-url="@Url.Page("/Library/Details", "ToggleStatus", new { id = Model.Work.Id })"
+                                title="Click to toggle status between Reading and Completed"
+                                aria-label="Status: @Model.Work.StatusLabel. Click to toggle.">
+                            <span data-status-text>@Model.Work.StatusLabel</span>
+                        </button>
+                    </div>
+                </div>
                 <partial name="_ProgressBar" model="progress" />
 
                 <dl class="detail-stat-grid">
-                    <div><dt>Characters read</dt><dd data-characters-read="@Model.Work.CharactersRead">@Model.Work.CharactersRead.ToString("N0")</dd></div>
-                    @if (Model.Work.CurrentCharacterPosition is int currentPosition)
-                    {
-                        <div><dt>Current position</dt><dd>@currentPosition.ToString("N0")</dd></div>
-                    }
+                    <div><dt>Characters tracked</dt><dd data-characters-read="@Model.Work.CharactersRead">@Model.Work.CharactersRead.ToString("N0")</dd></div>
                     <div>
                         <dt>Character total</dt>
                         <dd class="inline-edit-wrapper stat-inline-wrapper"
@@ -162,7 +157,6 @@
     </section>
 
     <aside class="content-card detail-aside">
-        <p class="eyebrow">Metadata</p>
         <dl class="metadata-list">
             <div><dt>Series</dt><dd>@(Model.Work.SeriesTitle ?? "Unassigned")</dd></div>
             <div><dt>Jiten</dt><dd>@Model.Work.JitenLinkLabel</dd></div>
@@ -172,14 +166,13 @@
             }
             @if (Model.Work.TtsuCharacterCount is int ttsuCharacters)
             {
-                <div><dt>TTSU characters</dt><dd>@ttsuCharacters.ToString("N0")</dd></div>
+                <div><dt>ッツ characters</dt><dd>@ttsuCharacters.ToString("N0")</dd></div>
             }
             @if (Model.Work.ManualCharacterCountOverride is int manualCharacters)
             {
                 <div data-metadata-manual-row><dt>Manual total</dt><dd data-metadata-manual-total>@manualCharacters.ToString("N0")</dd></div>
             }
             <div><dt>Total source</dt><dd data-metadata-source>@Model.Work.CharacterTotalSource</dd></div>
-            <div><dt>Status</dt><dd data-metadata-status>@Model.Work.StatusLabel</dd></div>
         </dl>
     </aside>
 </div>
@@ -222,13 +215,8 @@
 <section class="content-card section-block">
     <div class="section-heading">
         <div>
-            <p class="eyebrow">History</p>
-            <h2>Immersion sessions</h2>
+            <h2>Sessions</h2>
         </div>
-        @if (Model.Work.Logs.Count > 0)
-        {
-            <span class="section-summary">@Model.Work.SessionCount sessions · @Model.Work.TotalTimeLabel</span>
-        }
     </div>
 
     @if (Model.Work.Logs.Count == 0)
@@ -244,7 +232,6 @@
                         <th>Date</th>
                         <th>Characters</th>
                         <th>Time</th>
-                        <th>Source</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -254,7 +241,6 @@
                             <td><time datetime="@log.Date.ToString("yyyy-MM-dd")">@log.Date.ToString("MMM d, yyyy")</time></td>
                             <td>@log.CharactersRead.ToString("N0")</td>
                             <td>@log.TimeSpentLabel</td>
-                            <td><span class="source-tag"><i></i>@log.SourceLabel</span></td>
                         </tr>
                     }
                 </tbody>

@@ -6,7 +6,7 @@
   --bs-font-sans-serif: var(--font-ui);
   --color-canvas: #0f0f11;
   --color-surface: #16161a;
-  --color-raised: #1d1d22;
+  --color-raised: #22211d;
   --color-overlay: #252529;
   --color-edge: #773030;
   --color-edge-subtle: #1b1b20;
@@ -440,7 +440,6 @@ table,
   flex-direction: column;
   background: var(--color-surface);
   border: 1px solid var(--color-edge-subtle);
-  border-radius: 6px;
   overflow: hidden;
   transition: transform .12s ease, border-color .12s ease, background-color .12s ease;
 }
@@ -666,10 +665,7 @@ table,
 }
 
 .source-tag i {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--color-accent);
+  display: none;
 }
 
 .media-row-progress {
@@ -970,6 +966,13 @@ table,
   text-transform: uppercase;
 }
 
+.detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(260px, .8fr);
@@ -985,8 +988,9 @@ table,
 }
 
 .detail-primary h2 {
-  margin: 2px 0 18px;
+  margin: 0;
   font-size: 1.2rem;
+  display: inline;
 }
 
 .section-heading h2 {
@@ -1238,14 +1242,13 @@ body.cover-edit-open {
    ============================================================================= */
 
 .page-status-wrap {
-  margin: 6px 0 0;
+  display: inline;
 }
 
 .status-toggle-badge {
   background: transparent;
   border: 1px solid transparent;
   padding: 3px 8px;
-  border-radius: 12px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
   font-family: inherit;
@@ -1485,7 +1488,7 @@ body.cover-edit-open {
   width: 100%;
   border-collapse: collapse;
   color: var(--color-ink-2);
-  font-size: 12px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1499,10 +1502,8 @@ body.cover-edit-open {
 
 .immersion-log-table th {
   color: var(--color-ink-3);
-  font-size: 10px;
   font-weight: 500;
   letter-spacing: .04em;
-  text-transform: uppercase;
 }
 
 .immersion-log-table tbody tr:last-child td {
