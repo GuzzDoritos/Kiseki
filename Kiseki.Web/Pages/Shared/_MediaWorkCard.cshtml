@@ -1,7 +1,7 @@
 @model MediaWorkListItemViewModel
 @{
     var progressLabel = Model.CurrentCharacterPosition is int position && Model.TotalCharacters > 0
-        ? $"{position:N0} / {Model.TotalCharacters:N0} ch position"
+        ? $"{position:N0} / {Model.TotalCharacters:N0}"
         : Model.TotalCharacters > 0
             ? $"{Model.CharactersRead:N0} / {Model.TotalCharacters:N0} ch"
             : $"{Model.CharactersRead:N0} ch";
@@ -38,14 +38,14 @@
             </div>
 
             <div class="media-tags">
-                <span class="media-type-tag">@Model.MediaType</span>
+                <span class="media-type-tag">@Model.TypeToJapanese</span>
                 @if (Model.IsJitenLinked)
                 {
                     <span class="source-tag"><i></i>Jiten</span>
                 }
                 @if (Model.SessionCount > 0)
                 {
-                    <span class="source-tag"><i></i>TTSU &times;@Model.SessionCount</span>
+                    <span class="source-tag"><i></i>ッツ &times;@Model.SessionCount</span>
                 }
             </div>
 
