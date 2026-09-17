@@ -1,14 +1,5 @@
-@font-face {
-  font-family: "Yuji Syuku";
-  src: url("/fonts/yuji/YujiSyuku-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   color-scheme: dark;
-  --font-logo: "Yuji Syuku", serif;
   --font-ui: "Spline Sans", "Zen Kaku Gothic New", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-display: "Newsreader", "Zen Kaku Gothic New", Georgia, "Times New Roman", serif;
   --bs-body-font-family: var(--font-ui);
@@ -148,32 +139,31 @@ table,
 
 .brand-mark {
   display: inline-grid;
-  width: 28px;
-  height: 28px;
+  width: 70px;
+  height: 70px;
   place-items: center;
   flex: 0 0 auto;
   border-radius: 6px;
-  background: var(--color-accent);
   color: #fff;
-  font-family: var(--font-logo);
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 1;
-  text-align: center;
   user-select: none;
 }
 
 .brand-mark svg {
-  width: 14px;
-  height: 14px;
-  fill: #fff;
+  width: 60px;
+  height: 60px;
+  display: block;
+  fill: currentColor;
 }
 
 .brand-mark-auth {
-  width: 36px;
-  height: 36px;
-  font-size: 24px;
+  width: 70px;
+  height: 70px;
   border-radius: 8px;
+}
+
+.brand-mark-auth svg {
+  width: 60px;
+  height: 60px;
 }
 
 .app-nav {
@@ -2445,8 +2435,6 @@ body.cover-edit-open {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: var(--color-raised);
-  border: 1px solid var(--color-edge);
   margin-bottom: 14px;
 }
 

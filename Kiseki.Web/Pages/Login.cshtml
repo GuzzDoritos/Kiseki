@@ -8,10 +8,9 @@
 <div class="auth-card">
     <div class="auth-brand-header">
         <div class="auth-brand-badge">
-            <span class="brand-mark brand-mark-auth" aria-hidden="true">軌</span>
+            <partial name="_BrandMark" view-data='new ViewDataDictionary(ViewData) { { "BrandMarkClass", "brand-mark-auth" } }' />
         </div>
         <h1 class="auth-title">Kiseki</h1>
-        <p class="auth-subtitle">軌跡 &middot; Immersion Tracker</p>
     </div>
 
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
