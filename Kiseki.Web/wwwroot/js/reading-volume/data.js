@@ -91,15 +91,30 @@ export function toChartData(items, mode, startDate, endDate) {
     }
 
     if (mode === 'year') {
-        const monthTotals = Array.from({ length: 12 }, () => ({ chars: 0, time: 0 }));
+        const targetYear = startDate
+            ? parseInt(startDate.slice(0, 4), 10)
+            : (items.length > 0 ? parseInt(items[items.length - 1].date.slice(0, 4), 10) : new Date().getFullYear());
+
+        let maxMonth = 12;
+        if (endDate) {
+            const [endYear, endMonth] = endDate.split('-').map(Number);
+            if (endYear === targetYear && !isNaN(endMonth) && endMonth >= 1 && endMonth <= 12) {
+                maxMonth = endMonth;
+            }
+        }
+
+        const monthTotals = Array.from({ length: maxMonth }, () => ({ chars: 0, time: 0 }));
         for (const item of items) {
+            const itemYear = parseInt(item.date.slice(0, 4), 10);
+            if (itemYear !== targetYear) continue;
+
             const m = parseInt(item.date.substring(5, 7), 10);
-            if (m >= 1 && m <= 12) {
+            if (m >= 1 && m <= maxMonth) {
                 monthTotals[m - 1].chars += item.value;
                 monthTotals[m - 1].time += (item.timeMinutes ?? 0);
             }
         }
-        const xVals = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+        const xVals = Array.from({ length: maxMonth }, (_, i) => i + 1);
         const yVals = monthTotals.map(m => m.chars);
         const speedVals = monthTotals.map(m => calcSpeed(m.chars, m.time));
         return [xVals, yVals, speedVals];
@@ -109,12 +124,18 @@ export function toChartData(items, mode, startDate, endDate) {
         const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date();
         const year = start.getUTCFullYear();
         const month = start.getUTCMonth();
-        const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+        let maxDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+        if (endDate) {
+            const [endYear, endMonth, endDay] = endDate.split('-').map(Number);
+            if (endYear === year && endMonth === month + 1 && !isNaN(endDay)) {
+                maxDay = Math.min(maxDay, endDay);
+            }
+        }
 
         const xVals = [];
         const yVals = [];
         const speedVals = [];
-        for (let day = 1; day <= daysInMonth; day++) {
+        for (let day = 1; day <= maxDay; day++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const item = itemMap.get(dateStr);
             const chars = item ? item.value : 0;
@@ -129,23 +150,33 @@ export function toChartData(items, mode, startDate, endDate) {
 
     if (mode === 'week') {
         const start = startDate ? new Date(`${startDate}T00:00:00Z`) : new Date();
+        const end = endDate ? new Date(`${endDate}T00:00:00Z`) : new Date(start.getTime() + 6 * 86400000);
+        const msPerDay = 86400000;
+        const dayDiff = Math.round((end.getTime() - start.getTime()) / msPerDay);
+        const totalDays = Math.min(7, Math.max(1, dayDiff + 1));
+
         const xVals = [];
         const yVals = [];
         const speedVals = [];
+        const labels = {};
 
-        for (let i = 0; i < 7; i++) {
-            const curr = new Date(start);
-            curr.setUTCDate(start.getUTCDate() + i);
+        for (let i = 0; i < totalDays; i++) {
+            const curr = new Date(start.getTime() + i * msPerDay);
             const dateStr = curr.toISOString().slice(0, 10);
             const item = itemMap.get(dateStr);
             const chars = item ? item.value : 0;
             const time = item ? (item.timeMinutes ?? 0) : 0;
 
+            const dayOfMonth = curr.getUTCDate();
             xVals.push(i + 1);
             yVals.push(chars);
             speedVals.push(calcSpeed(chars, time));
+            labels[i + 1] = String(dayOfMonth);
         }
-        return [xVals, yVals, speedVals];
+
+        const result = [xVals, yVals, speedVals];
+        result.labels = labels;
+        return result;
     }
 
     // Default: day or raw list

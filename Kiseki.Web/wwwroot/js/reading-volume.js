@@ -89,13 +89,23 @@ export function initReadingVolumeChart() {
         return String(val);
     }
 
+    currentStartDate = `${currentYear}-01-01`;
+    let currentEndDate = (currentYear === new Date().getFullYear())
+        ? new Date().toISOString().slice(0, 10)
+        : `${currentYear}-12-31`;
+
+    const initialFiltered = rawData.filter(item => item.date >= currentStartDate && item.date <= currentEndDate);
+    const initialData = toChartData(initialFiltered, 'year', currentStartDate, currentEndDate);
+
     const options = {
-        width: 800,
+        width: container.clientWidth,
         height: 300,
         scales: {
             x: {
                 time: false,
-                auto: false
+                auto: false,
+                min: 1,
+                max: initialData[0].length || 12
             },
             y: {
                 range: (u, dataMin, dataMax) => [
@@ -126,10 +136,11 @@ export function initReadingVolumeChart() {
                     }
 
                     if (currentMode === 'month') {
-                        const ticks = [];
+                        const ticks = [1];
                         for (let day = 1; day <= max; day += 7) {
                             ticks.push(day);
                         }
+                        ticks.push(max)
                         return ticks;
                     }
 
@@ -142,7 +153,7 @@ export function initReadingVolumeChart() {
                     return ticks;
                 },
                 values: (u, vals) => {
-                    if (currentMode === 'all' && currentLabels) {
+                    if ((currentMode === 'all' || currentMode === 'week') && currentLabels) {
                         return vals.map(v => currentLabels[Math.round(v)] ?? '');
                     }
                     return vals.map(v => Math.round(v));
@@ -158,7 +169,7 @@ export function initReadingVolumeChart() {
             {
                 scale: 'speed',
                 side: 1,
-                stroke: '#e5a00d',
+                stroke: '#ff7979',
                 grid: { show: false },
                 values: (u, values) => values.map(value => value >= 1000 ? `${Math.round(value / 1000)}k/h` : `${Math.round(value)}/h`)
             }
@@ -181,7 +192,7 @@ export function initReadingVolumeChart() {
             {
                 label: 'Speed',
                 scale: 'speed',
-                stroke: '#e5a00d',
+                stroke: '#ff7979',
                 width: 2,
                 spanGaps: true,
                 value: (u, rawVal) => (rawVal != null ? `${Math.round(rawVal).toLocaleString()} ch/h` : '--')
@@ -189,7 +200,6 @@ export function initReadingVolumeChart() {
         ]
     };
 
-    const initialData = toChartData(rawData, 'year');
     const chart = new window.uPlot(options, initialData, container);
 
     document.addEventListener('kiseki:rangeSelected', event => {
@@ -214,20 +224,6 @@ export function initReadingVolumeChart() {
         let xMin = 1;
         let xMax = chartData[0].length || 1;
 
-        if (mode === 'all') {
-            xMin = 1;
-            xMax = chartData[0].length || 1;
-        } else if (mode === 'year') {
-            xMin = 1;
-            xMax = 12;
-        } else if (mode === 'month') {
-            xMin = 1;
-            xMax = chartData[0].length;
-        } else if (mode === 'week') {
-            xMin = 1;
-            xMax = 7;
-        }
-
         chart.batch(() => {
             chart.setData(chartData, false);
             chart.setScale('x', {
@@ -235,6 +231,11 @@ export function initReadingVolumeChart() {
                 max: xMax
             });
         });
+    });
+
+    window.addEventListener("resize", () => {
+        const newWidth = container.clientWidth;
+        chart.setSize({ width: newWidth, height: 300 });
     });
 }
 

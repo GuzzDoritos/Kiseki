@@ -6,24 +6,46 @@ import { toISODate, formatDateDisplay } from './calendar-math.js';
  * @param {'day'|'week'|'month'|'year'} mode
  * @returns {{ start: string, end: string, label: string }}
  */
-export function getSelectedRange(dateStr, mode) {
+export function getSelectedRange(dateStr, mode, dataMap) {
     const parts = dateStr.split('-').map(Number);
     const date = new Date(parts[0], parts[1] - 1, parts[2]);
 
     if (mode === 'year') {
+        const yearStr = String(parts[0]);
+        const today = new Date();
+        const isCurrentYear = parts[0] === today.getFullYear();
+        const endDate = isCurrentYear ? toISODate(today) : `${yearStr}-12-31`;
+
         return {
-            start: `${parts[0]}-01-01`,
-            end: `${parts[0]}-12-31`,
-            label: String(parts[0])
+            start: `${yearStr}-01-01`,
+            end: endDate,
+            label: yearStr
         };
     }
 
     if (mode === 'month') {
-        const first = new Date(date.getFullYear(), date.getMonth(), 1);
-        const last = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        const monthPrefix = `${parts[0]}-${String(parts[1]).padStart(2, '0')}`;
+        const first = `${monthPrefix}-01`;
+        const lastDayOfMonth = new Date(parts[0], parts[1], 0).getDate();
+        let end = `${monthPrefix}-${String(lastDayOfMonth).padStart(2, '0')}`;
+
+        const todayStr = toISODate(new Date());
+        const isCurrentOrFutureMonth = monthPrefix >= todayStr.slice(0, 7);
+
+        if (dataMap && dataMap.size > 0) {
+            const monthDates = Array.from(dataMap.keys())
+                .filter(d => d.startsWith(`${monthPrefix}-`))
+                .sort();
+
+            // For the current ongoing month, clamp to the newest record so trailing future days aren't zeroes
+            if (isCurrentOrFutureMonth && monthDates.length > 0) {
+                end = monthDates[monthDates.length - 1];
+            }
+        }
+
         return {
-            start: toISODate(first),
-            end: toISODate(last),
+            start: first,
+            end: end,
             label: date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
         };
     }
@@ -35,9 +57,26 @@ export function getSelectedRange(dateStr, mode) {
         const sunday = new Date(monday);
         sunday.setDate(monday.getDate() + 6);
 
+        const mondayStr = toISODate(monday);
+        const sundayStr = toISODate(sunday);
+        let end = sundayStr;
+
+        const todayStr = toISODate(new Date());
+        const isCurrentOrFutureWeek = sundayStr >= todayStr;
+
+        if (dataMap && dataMap.size > 0) {
+            const weekDates = Array.from(dataMap.keys())
+                .filter(d => d >= mondayStr && d <= sundayStr)
+                .sort();
+
+            if (isCurrentOrFutureWeek && weekDates.length > 0) {
+                end = weekDates[weekDates.length - 1];
+            }
+        }
+
         return {
-            start: toISODate(monday),
-            end: toISODate(sunday),
+            start: mondayStr,
+            end: end,
             label: `${formatDateDisplay(monday)} – ${formatDateDisplay(sunday)} (Week)`
         };
     }
@@ -87,7 +126,7 @@ export function applySelection(dateStr, dataMap, mode) {
             label: 'All Time'
         };
     } else {
-        range = getSelectedRange(dateStr, currentMode);
+        range = getSelectedRange(dateStr, currentMode, dataMap);
     }
 
     let rangeChars = 0;
