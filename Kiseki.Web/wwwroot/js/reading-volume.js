@@ -169,7 +169,7 @@ export function initReadingVolumeChart() {
             {
                 scale: 'speed',
                 side: 1,
-                stroke: '#ff7979',
+                stroke: '#888',
                 grid: { show: false },
                 values: (u, values) => values.map(value => value >= 1000 ? `${Math.round(value / 1000)}k/h` : `${Math.round(value)}/h`)
             }
@@ -192,7 +192,7 @@ export function initReadingVolumeChart() {
             {
                 label: 'Speed',
                 scale: 'speed',
-                stroke: '#ff7979',
+                stroke: '#ff5858',
                 width: 2,
                 spanGaps: true,
                 value: (u, rawVal) => (rawVal != null ? `${Math.round(rawVal).toLocaleString()} ch/h` : '--')
