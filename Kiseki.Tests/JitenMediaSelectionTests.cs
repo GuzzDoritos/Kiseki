@@ -29,6 +29,47 @@ public sealed class JitenMediaSelectionTests
         Assert.Equal(11, selection.SubdeckId);
         Assert.Equal(123_456, selection.CharacterCount);
         Assert.Equal("https://cdn.jiten.moe/series.jpg", selection.CoverUrl);
+        Assert.Equal(JitenCoverEvidence.ParentFallback, selection.CoverEvidence);
+    }
+
+    [Fact]
+    public void FromSubdeck_UsesChildCoverWhenAvailable()
+    {
+        var parent = new JitenDeckDTO
+        {
+            DeckId = 10,
+            OriginalTitle = "Series",
+            CoverName = "https://cdn.jiten.moe/series.jpg"
+        };
+        var subdeck = new JitenDeckDTO
+        {
+            DeckId = 11,
+            OriginalTitle = "第一巻",
+            EnglishTitle = "Volume 1",
+            CharacterCount = 123_456,
+            CoverName = "https://cdn.jiten.moe/volume-1.jpg"
+        };
+
+        var selection = JitenMediaSelection.FromSubdeck(parent, subdeck);
+
+        Assert.Equal("https://cdn.jiten.moe/volume-1.jpg", selection.CoverUrl);
+        Assert.Equal(JitenCoverEvidence.Specific, selection.CoverEvidence);
+    }
+
+    [Fact]
+    public void FromDeck_SetsNoneWhenNoCoverExists()
+    {
+        var deck = new JitenDeckDTO
+        {
+            DeckId = 10,
+            OriginalTitle = "Standalone Book",
+            CoverName = "nocover.jpg"
+        };
+
+        var selection = JitenMediaSelection.FromDeck(deck);
+
+        Assert.Null(selection.CoverUrl);
+        Assert.Equal(JitenCoverEvidence.None, selection.CoverEvidence);
     }
 
     [Fact]

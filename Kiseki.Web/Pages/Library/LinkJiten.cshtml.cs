@@ -14,8 +14,16 @@ namespace Kiseki.Web.Pages.Library;
 
 public sealed class LinkJitenModel(
     ImmersionDbContext dbContext,
-    IJitenApiClient jitenApiClient) : PageModel
+    IJitenApiClient jitenApiClient,
+    IJitenSelectionResolver jitenSelectionResolver) : PageModel
 {
+    public LinkJitenModel(
+        ImmersionDbContext dbContext,
+        IJitenApiClient jitenApiClient)
+        : this(dbContext, jitenApiClient, new JitenSelectionResolver(jitenApiClient))
+    {
+    }
+
     public Guid WorkId { get; private set; }
     public string WorkTitle { get; private set; } = string.Empty;
     public MediaType WorkMediaType { get; private set; }
@@ -167,25 +175,26 @@ public sealed class LinkJitenModel(
 
         try
         {
-            var detail = await jitenApiClient.GetDeckDetailAsync(
+            var resolution = await jitenSelectionResolver.ResolveAsync(
                 Input.ParentDeckId,
+                Input.SubdeckId,
                 cancellationToken);
 
-            if (!TryPopulateDetail(detail, Input.ParentDeckId) || SelectedParent is null)
+            if (!resolution.IsSuccess)
             {
-                ModelState.AddModelError(string.Empty, "Jiten could not verify the selected deck.");
+                var message = resolution.Status switch
+                {
+                    JitenSelectionStatus.SubdeckNotFound =>
+                        "The selected Jiten subdeck no longer exists.",
+                    JitenSelectionStatus.ParentHasChildren =>
+                        "Cannot link a series deck directly when subdecks exist. Choose a specific subdeck.",
+                    _ => "Jiten could not verify the selected deck."
+                };
+                ModelState.AddModelError(string.Empty, message);
                 return Page();
             }
 
-            var selection = Input.SubdeckId is int subdeckId
-                ? Subdecks.SingleOrDefault(item => item.SubdeckId == subdeckId)
-                : SelectedParent;
-
-            if (selection is null)
-            {
-                ModelState.AddModelError(string.Empty, "The selected Jiten subdeck no longer exists.");
-                return Page();
-            }
+            var selection = resolution.Selection!;
 
             if (!selection.HasTitle(Input.TitleChoice))
             {

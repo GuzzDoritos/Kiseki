@@ -32,6 +32,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Kiseki.Core\Kiseki.Core.csproj" />
     <ProjectReference Include="..\Kiseki.Web\Kiseki.Web.csproj" />
+    <ProjectReference Include="..\Kiseki.Console\Kiseki.Console.csproj" />
   </ItemGroup>
 
   <ItemGroup>

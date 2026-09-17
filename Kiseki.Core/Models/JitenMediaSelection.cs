@@ -11,6 +11,13 @@ public enum JitenTitleChoice
     Romaji
 }
 
+public enum JitenCoverEvidence
+{
+    None,
+    Specific,
+    ParentFallback
+}
+
 public sealed record JitenMediaSelection(
     int DeckId,
     int? SubdeckId,
@@ -19,7 +26,8 @@ public sealed record JitenMediaSelection(
     string EnglishTitle,
     int CharacterCount,
     string? CoverUrl,
-    int ChildrenDeckCount)
+    int ChildrenDeckCount,
+    JitenCoverEvidence CoverEvidence = JitenCoverEvidence.None)
 {
     public bool IsSubdeck => SubdeckId.HasValue;
 
@@ -98,6 +106,15 @@ public sealed record JitenMediaSelection(
         JitenDeckDTO selectedDeck,
         string? fallbackCoverUrl)
     {
+        var specificCoverUrl = NormalizeCoverUrl(selectedDeck.CoverName);
+        var fallbackCover = specificCoverUrl is null ? NormalizeCoverUrl(fallbackCoverUrl) : null;
+        var coverUrl = specificCoverUrl ?? fallbackCover;
+        var coverEvidence = specificCoverUrl is not null
+            ? JitenCoverEvidence.Specific
+            : fallbackCover is not null
+                ? JitenCoverEvidence.ParentFallback
+                : JitenCoverEvidence.None;
+
         return new JitenMediaSelection(
             deckId,
             subdeckId,
@@ -105,8 +122,9 @@ public sealed record JitenMediaSelection(
             selectedDeck.RomajiTitle?.Trim() ?? string.Empty,
             selectedDeck.EnglishTitle?.Trim() ?? string.Empty,
             selectedDeck.CharacterCount,
-            NormalizeCoverUrl(selectedDeck.CoverName) ?? NormalizeCoverUrl(fallbackCoverUrl),
-            selectedDeck.ChildrenDeckCount);
+            coverUrl,
+            selectedDeck.ChildrenDeckCount,
+            coverEvidence);
     }
 
     private string? ResolveTitle(JitenTitleChoice choice)

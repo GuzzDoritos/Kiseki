@@ -90,31 +90,34 @@
                     </div>
 
                     <div class="jiten-result-actions">
-                        <form method="post" asp-page-handler="Link" asp-route-id="@Model.WorkId">
-                            <input type="hidden" name="Input.ParentDeckId" value="@result.DeckId" />
-                            <label for="title-@result.DeckId">Title after linking</label>
-                            <select class="form-select" id="title-@result.DeckId" name="Input.TitleChoice">
-                                <option value="KeepCurrent">Keep “@Model.WorkTitle”</option>
-                                @if (!string.IsNullOrWhiteSpace(result.OriginalTitle))
-                                {
-                                    <option value="Original">Use original title</option>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(result.EnglishTitle))
-                                {
-                                    <option value="English">Use English title</option>
-                                }
-                                @if (!string.IsNullOrWhiteSpace(result.RomajiTitle))
-                                {
-                                    <option value="Romaji">Use romaji title</option>
-                                }
-                            </select>
-                            <button class="btn btn-primary" type="submit">
-                                @(Model.HasExistingLink ? "Replace with this deck" : "Link entire deck")
-                            </button>
-                        </form>
-                        @if (result.ChildrenDeckCount > 0)
+                        @if (result.ChildrenDeckCount == 0)
                         {
-                            <a class="btn btn-outline-secondary"
+                            <form method="post" asp-page-handler="Link" asp-route-id="@Model.WorkId">
+                                <input type="hidden" name="Input.ParentDeckId" value="@result.DeckId" />
+                                <label for="title-@result.DeckId">Title after linking</label>
+                                <select class="form-select" id="title-@result.DeckId" name="Input.TitleChoice">
+                                    <option value="KeepCurrent">Keep “@Model.WorkTitle”</option>
+                                    @if (!string.IsNullOrWhiteSpace(result.OriginalTitle))
+                                    {
+                                        <option value="Original">Use original title</option>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(result.EnglishTitle))
+                                    {
+                                        <option value="English">Use English title</option>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(result.RomajiTitle))
+                                    {
+                                        <option value="Romaji">Use romaji title</option>
+                                    }
+                                </select>
+                                <button class="btn btn-primary" type="submit">
+                                    @(Model.HasExistingLink ? "Replace with this deck" : "Link entire deck")
+                                </button>
+                            </form>
+                        }
+                        else
+                        {
+                            <a class="btn btn-primary"
                                asp-page-handler="Subdecks"
                                asp-route-id="@Model.WorkId"
                                asp-route-deckId="@result.DeckId"
@@ -149,7 +152,7 @@
                         @if (subdeck.CoverUrl is not null)
                         {
                             <img src="@subdeck.CoverUrl"
-                                 alt="Cover for @subdeck.DisplayTitle"
+                                 alt="Cover for @subdeck.DisplayTitle@(subdeck.CoverEvidence == JitenCoverEvidence.ParentFallback ? " (Series fallback)" : "")"
                                  loading="lazy"
                                  referrerpolicy="no-referrer"
                                  data-cover-image />
@@ -170,6 +173,10 @@
                         <div class="jiten-result-meta">
                             <span>Subdeck @subdeck.SubdeckId</span>
                             <span>@subdeck.CharacterCount.ToString("N0") characters</span>
+                            @if (subdeck.CoverEvidence == JitenCoverEvidence.ParentFallback)
+                            {
+                                <span>Series cover fallback</span>
+                            }
                         </div>
                     </div>
 

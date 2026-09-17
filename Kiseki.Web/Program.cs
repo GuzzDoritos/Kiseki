@@ -96,6 +96,7 @@ builder.Services.AddAntiforgery(options =>
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<IJitenSelectionResolver, JitenSelectionResolver>();
 builder.Services.AddSingleton<TtsuDataLoader>();
 builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
 builder.Services.AddSingleton<IAuthService, SinglePasswordAuthService>();

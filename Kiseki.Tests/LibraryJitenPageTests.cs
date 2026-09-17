@@ -79,6 +79,97 @@ public sealed class LibraryJitenPageTests
     }
 
     [Fact]
+    public async Task Link_RejectsParentDeckWithChildrenWhenNoSubdeckIsSelected()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Local title");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = CreateLinkModel(
+            database.Context,
+            new StubJitenApiClient { Detail = BookDetail() });
+        model.Input = new LinkJitenModel.LinkJitenInput
+        {
+            ParentDeckId = 10,
+            SubdeckId = null,
+            TitleChoice = JitenTitleChoice.KeepCurrent
+        };
+
+        var result = await model.OnPostLinkAsync(work.Id, CancellationToken.None);
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.ModelState.IsValid);
+        Assert.True(model.ModelState[string.Empty]?.Errors.Any(e =>
+            e.ErrorMessage.Contains("Cannot link a series deck directly")));
+
+        database.Context.ChangeTracker.Clear();
+        var unchangedWork = await database.Context.MediaWorks.SingleAsync();
+        Assert.False(unchangedWork.HasJitenLink);
+        Assert.Equal("Local title", unchangedWork.Title);
+    }
+
+    [Fact]
+    public async Task Link_AllowsStandaloneDeckWithoutChildren()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Local title");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var standaloneDetail = new JitenDeckDetailDTO
+        {
+            MainDeck = new JitenDeckDTO
+            {
+                DeckId = 42,
+                OriginalTitle = "Standalone Work",
+                EnglishTitle = "Standalone Work EN",
+                CharacterCount = 88_000,
+                CoverName = "https://cdn.jiten.moe/standalone.jpg",
+                ChildrenDeckCount = 0
+            },
+            SubDecks = []
+        };
+
+        var model = CreateLinkModel(
+            database.Context,
+            new StubJitenApiClient { Detail = standaloneDetail });
+        model.Input = new LinkJitenModel.LinkJitenInput
+        {
+            ParentDeckId = 42,
+            SubdeckId = null,
+            TitleChoice = JitenTitleChoice.Original
+        };
+
+        var result = await model.OnPostLinkAsync(work.Id, CancellationToken.None);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Library/Details", redirect.PageName);
+
+        database.Context.ChangeTracker.Clear();
+        var linkedWork = await database.Context.MediaWorks.SingleAsync();
+        Assert.True(linkedWork.HasJitenLink);
+        Assert.Equal(42, linkedWork.JitenDeckId);
+        Assert.Null(linkedWork.JitenSubdeckId);
+        Assert.Equal("Standalone Work", linkedWork.Title);
+        Assert.Equal(88_000, linkedWork.JitenCharacterCount);
+        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", linkedWork.JitenCoverUrl);
+    }
+
+    [Fact]
+    public void Markup_DoesNotRenderLinkEntireDeckWhenResultHasChildren()
+    {
+        var viewPath = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "../../../..", "Kiseki.Web", "Pages", "Library", "LinkJiten.cshtml"));
+        Assert.True(File.Exists(viewPath), $"View file not found at {viewPath}");
+
+        var content = File.ReadAllText(viewPath);
+
+        Assert.Contains("@if (result.ChildrenDeckCount == 0)", content);
+        Assert.Contains("Choose a subdeck", content);
+    }
+
+    [Fact]
     public async Task Get_WithAQuerySearchesWithoutChangingTheMediaWork()
     {
         await using var database = await TestDatabase.CreateAsync();

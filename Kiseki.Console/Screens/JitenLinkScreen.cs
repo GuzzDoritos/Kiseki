@@ -8,10 +8,17 @@ namespace Kiseki.Console.Screens;
 public sealed class JitenLinkScreen
 {
     private readonly IJitenApiClient _jitenApiClient;
+    private readonly IJitenSelectionResolver _selectionResolver;
+    private readonly IAnsiConsole _console;
 
-    public JitenLinkScreen(IJitenApiClient jitenApiClient)
+    public JitenLinkScreen(
+        IJitenApiClient jitenApiClient,
+        IJitenSelectionResolver? selectionResolver = null,
+        IAnsiConsole? console = null)
     {
-        _jitenApiClient = jitenApiClient;
+        _jitenApiClient = jitenApiClient ?? throw new ArgumentNullException(nameof(jitenApiClient));
+        _selectionResolver = selectionResolver ?? new JitenSelectionResolver(jitenApiClient);
+        _console = console ?? AnsiConsole.Console;
     }
 
     public async Task<JitenMediaSelection?> SelectBookAsync(string? suggestedQuery = null)
@@ -23,8 +30,8 @@ public sealed class JitenLinkScreen
             prompt.DefaultValue(suggestedQuery);
         }
 
-        var query = AnsiConsole.Prompt(prompt);
-        AnsiConsole.MarkupLine("[green]Querying Jiten...[/]");
+        var query = _console.Prompt(prompt);
+        _console.MarkupLine("[green]Querying Jiten...[/]");
 
         IReadOnlyList<JitenDeckDTO> results;
 
@@ -34,14 +41,14 @@ public sealed class JitenLinkScreen
         }
         catch (HttpRequestException exception)
         {
-            AnsiConsole.MarkupLine(
+            _console.MarkupLine(
                 $"[red]Jiten request failed:[/] {Markup.Escape(exception.Message)}");
             return null;
         }
 
         if (results.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No Jiten books were found.[/]");
+            _console.MarkupLine("[yellow]No Jiten books were found.[/]");
             return null;
         }
 
@@ -54,37 +61,48 @@ public sealed class JitenLinkScreen
 
         if (selectedDeck.ChildrenDeckCount <= 0)
         {
-            var selection = CreateDeckSelection(selectedDeck);
-            WriteSelection(selection);
-            return selection;
+            var resolution = await _selectionResolver.ResolveAsync(selectedDeck.DeckId);
+            if (resolution.IsSuccess)
+            {
+                WriteSelection(resolution.Selection!);
+                return resolution.Selection;
+            }
+
+            if (resolution.Status == JitenSelectionStatus.ParentHasChildren)
+            {
+                _console.MarkupLine(
+                    "[yellow]This deck has subdecks and cannot be linked directly as a single work.[/]");
+                return await SelectSubdeckAsync(selectedDeck);
+            }
+
+            _console.MarkupLine(
+                $"[red]{Markup.Escape(resolution.ErrorMessage ?? "Could not verify deck.")}[/]");
+            return null;
         }
 
-        return await SelectDeckOrSubdeckAsync(selectedDeck);
+        return await SelectSubdeckAsync(selectedDeck);
     }
 
-    private async Task<JitenMediaSelection?> SelectDeckOrSubdeckAsync(
+    public static IReadOnlyList<string> GetSubdeckPromptChoices() =>
+        ["Choose a subdeck", "Cancel"];
+
+    private async Task<JitenMediaSelection?> SelectSubdeckAsync(
         JitenDeckDTO selectedDeck)
     {
-        var action = AnsiConsole.Prompt(
+        var choices = GetSubdeckPromptChoices();
+        var subtitle = selectedDeck.ChildrenDeckCount > 0
+            ? $"{selectedDeck.ChildrenDeckCount} subdecks."
+            : "subdecks.";
+
+        var action = _console.Prompt(
             new SelectionPrompt<string>()
                 .Title(
-                    $"[green]{Markup.Escape(GetTitle(selectedDeck))}[/] contains " +
-                    $"{selectedDeck.ChildrenDeckCount} subdecks.")
-                .AddChoices(
-                    "Link the entire deck",
-                    "Choose a subdeck",
-                    "Cancel"));
+                    $"[green]{Markup.Escape(GetTitle(selectedDeck))}[/] contains {subtitle}")
+                .AddChoices(choices));
 
         if (action == "Cancel")
         {
             return null;
-        }
-
-        if (action == "Link the entire deck")
-        {
-            var wholeDeck = CreateDeckSelection(selectedDeck);
-            WriteSelection(wholeDeck);
-            return wholeDeck;
         }
 
         JitenDeckDetailDTO? detail;
@@ -95,14 +113,14 @@ public sealed class JitenLinkScreen
         }
         catch (HttpRequestException exception)
         {
-            AnsiConsole.MarkupLine(
+            _console.MarkupLine(
                 $"[red]Could not load subdecks:[/] {Markup.Escape(exception.Message)}");
             return null;
         }
 
         if (detail is null || detail.SubDecks.Count == 0)
         {
-            AnsiConsole.MarkupLine("[yellow]No subdecks were returned by Jiten.[/]");
+            _console.MarkupLine("[yellow]No subdecks were returned by Jiten.[/]");
             return null;
         }
 
@@ -115,13 +133,22 @@ public sealed class JitenLinkScreen
             return null;
         }
 
-        var selection = JitenMediaSelection.FromSubdeck(selectedDeck, selectedSubdeck);
+        var resolution = await _selectionResolver.ResolveAsync(
+            selectedDeck.DeckId,
+            selectedSubdeck.DeckId);
 
-        WriteSelection(selection);
-        return selection;
+        if (!resolution.IsSuccess)
+        {
+            _console.MarkupLine(
+                $"[red]{Markup.Escape(resolution.ErrorMessage ?? "Could not verify subdeck.")}[/]");
+            return null;
+        }
+
+        WriteSelection(resolution.Selection!);
+        return resolution.Selection;
     }
 
-    private static JitenDeckDTO? SelectDeck(
+    private JitenDeckDTO? SelectDeck(
         IEnumerable<JitenDeckDTO> decks,
         string promptTitle)
     {
@@ -130,7 +157,7 @@ public sealed class JitenLinkScreen
             .Append(new DeckOption(null))
             .ToList();
 
-        return AnsiConsole.Prompt(
+        return _console.Prompt(
             new SelectionPrompt<DeckOption>()
                 .Title(promptTitle)
                 .PageSize(15)
@@ -152,11 +179,6 @@ public sealed class JitenLinkScreen
                $"[yellow]{deck.CharacterCount:N0} chars[/]{children}";
     }
 
-    private static JitenMediaSelection CreateDeckSelection(JitenDeckDTO deck)
-    {
-        return JitenMediaSelection.FromDeck(deck);
-    }
-
     private static string GetTitle(JitenDeckDTO deck)
     {
         if (!string.IsNullOrWhiteSpace(deck.OriginalTitle))
@@ -172,7 +194,7 @@ public sealed class JitenLinkScreen
         return $"Jiten deck {deck.DeckId}";
     }
 
-    private static void WriteSelection(JitenMediaSelection selection)
+    private void WriteSelection(JitenMediaSelection selection)
     {
         var table = new Table()
             .Border(TableBorder.Rounded)
@@ -188,8 +210,15 @@ public sealed class JitenLinkScreen
             "Link type",
             selection.IsSubdeck ? "Specific subdeck" : "Entire deck");
         table.AddRow("Characters", selection.CharacterCount.ToString("N0"));
+        var coverLabel = selection.CoverEvidence switch
+        {
+            JitenCoverEvidence.Specific => "Volume cover",
+            JitenCoverEvidence.ParentFallback => "Series cover fallback",
+            _ => "No cover"
+        };
+        table.AddRow("Cover", coverLabel);
 
-        AnsiConsole.Write(table);
+        _console.Write(table);
     }
 
     private sealed record DeckOption(JitenDeckDTO? Deck);
