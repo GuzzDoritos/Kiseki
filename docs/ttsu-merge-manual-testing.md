@@ -105,3 +105,23 @@ dotnet test Kiseki.slnx --configuration Release
 These tests cover upgrade from the previous PostgreSQL migration, duplicate/orphan preservation, concurrent first imports, and a simulated lost commit response. They do not contact Neon, Jiten, or Google Drive. Clearing `KISEKI_TEST_POSTGRES` skips only the PostgreSQL integration tests.
 
 TTSU's upstream [statistics documentation](https://github.com/ttu-ttu/ebook-reader#statistics-merge-mode) describes per-book/day tracking and revision-based merge behavior. Source paths/titles are matching hints, not globally stable identifiers; source renames or ambiguous matches still require selection.
+
+## Stage 5: Metadata enrichment calibration and hybrid default review
+
+### Environment & execution record
+
+The deterministic calibration corpus and server-side behavior were verified in development. The full interactive multi-book browser matrix was not completed, so the no-preference default remains off. This is the safety gate required by Stage 5; the default must not be enabled from source inspection or automated coverage alone.
+
+The reviewed corpus contains 31 cases: 17 High, 11 Review, and 3 None results; 30 cases return `Matched` and one returns `NoCandidates`. It covers exact 15% and 30% character-count boundaries plus values immediately outside them. Tests assert expected Review as well as High winners, exact hierarchy calls and de-duplication, parent-cover evidence, mixed-batch isolation, and zero false High results without live HTTP or real retry delays.
+
+| Scenario | Mode | Observed result |
+| --- | --- | --- |
+| **Default state (no stored preference)** | Server rendering & Unit tests | The server property and `ttsu-auto-match.js` both default the checkbox to unchecked until the manual calibration gate is complete. |
+| **Stored preference `false`** | Client script inspection & Unit tests | `ttsu-auto-match.js` checks `stored !== null` and applies `checkbox.checked = stored === 'true'`, restoring unchecked state. Explicit `AutoMatchMetadata = false` in PageModel makes 0 match service calls and imports reading normally. |
+| **Stored preference `true`** | Client script inspection & automated tests | `ttsu-auto-match.js` applies `checkbox.checked = true`. Preview issues a batch match request and displays suggestions. Interactive browser persistence remains to be exercised before changing the no-preference default. |
+| **Per-book opt-out** | Automated test (`TtsuImportPageTests`) | Deselecting a candidate on a book (`CandidateKey = null` / "Import without Jiten metadata") preserves reading data and creates/updates work with null `JitenDeckId` and 0 metadata links. |
+| **Target change & Refresh review** | Automated test (`TtsuImportPageTests`) | Selecting a different work target and clicking Refresh review recalculates preview totals, preserves valid selections, invalidates changed selections via review tokens, and protects existing links. |
+| **Mixed High / Review / None / Unavailable** | Automated test (`JitenMatchCalibrationTests`, `TtsuImportPageTests`) | Batch match returns mixed outcomes without cross-contamination. High candidates preselect metadata; Review, None, and unavailable books default to "Import without Jiten metadata" while reading remains selected. |
+| **Rate limit / HTTP error / Timeout** | Automated test (`JitenMatchServiceTests`, `TtsuImportPageTests`) | 429 rate limit, 500 server error, timeout with active request token, and malformed JSON payloads gracefully degrade to `Unavailable` / `MetadataSkips` without failing reading import. Caller cancellation propagates. |
+| **Expired preview** | Automated test (`TtsuImportPageTests`) | Confirming an expired batch (>30 min or cache eviction) displays error requiring re-upload without mutating database. |
+| **Replay idempotency** | Automated test (`TtsuImportPageTests`) | Replaying a committed confirmation returns the durable receipt directly from the database without re-invoking Jiten API or duplicating rows. |

@@ -1,0 +1,1110 @@
+{
+  "mixedBatch": {
+    "caseNames": [
+      "standalone_exact_match",
+      "missing_authoritative_total",
+      "unrelated_low_score_candidates"
+    ],
+    "unavailableRawTitle": "API Failure Novel 1"
+  },
+  "cases": [
+    {
+      "caseName": "standalone_exact_match",
+      "family": "1_standalone",
+      "reason": "Verified standalone book with no volume marker matches High",
+      "rawTitle": "君の名は。",
+      "authoritativeTotal": 85000,
+      "searchResults": [
+        {
+          "deckId": 100,
+          "parentDeckId": null,
+          "originalTitle": "君の名は。",
+          "romajiTitle": "Kimi no Na wa.",
+          "englishTitle": "Your Name.",
+          "characterCount": 84000,
+          "childrenDeckCount": 0,
+          "coverName": "https://cdn.jiten.moe/kimi.jpg"
+        }
+      ],
+      "deckDetails": [
+        {
+          "mainDeck": {
+            "deckId": 100,
+            "originalTitle": "君の名は。",
+            "romajiTitle": "Kimi no Na wa.",
+            "englishTitle": "Your Name.",
+            "characterCount": 84000,
+            "childrenDeckCount": 0,
+            "coverName": "https://cdn.jiten.moe/kimi.jpg"
+          },
+          "subDecks": []
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 100,
+      "expectedSubdeckId": null,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Exact original base title matched", "Standalone deck with no volume markers"]
+    },
+    {
+      "caseName": "numbered_arabic_bare",
+      "family": "2_numbered_series",
+      "reason": "Numbered series with bare terminal Arabic number matches volume",
+      "rawTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 2",
+      "authoritativeTotal": 102000,
+      "searchResults": [
+        {
+          "deckId": 200,
+          "parentDeckId": null,
+          "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+          "romajiTitle": "Otonari no Tenshi-sama ni Itsu no Ma ni ka Dame Ningen ni Sareteita Ken",
+          "englishTitle": "The Angel Next Door Spoils Me Rotten",
+          "characterCount": 510000,
+          "childrenDeckCount": 5,
+          "coverName": "https://cdn.jiten.moe/otonari.jpg"
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 200,
+            "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+            "childrenDeckCount": 5,
+            "coverName": "https://cdn.jiten.moe/otonari.jpg"
+          },
+          "subDecks": [
+            { "deckId": 201, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 1", "characterCount": 100000, "coverName": "https://cdn.jiten.moe/v1.jpg" },
+            { "deckId": 202, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 2", "characterCount": 101000, "coverName": "https://cdn.jiten.moe/v2.jpg" },
+            { "deckId": 203, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 3", "characterCount": 98000, "coverName": "https://cdn.jiten.moe/v3.jpg" },
+            { "deckId": 204, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 4", "characterCount": 105000, "coverName": "https://cdn.jiten.moe/v4.jpg" },
+            { "deckId": 205, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 5", "characterCount": 109000, "coverName": "https://cdn.jiten.moe/v5.jpg" }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 200,
+      "expectedSubdeckId": 202,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Exact original base title matched", "Volume 2 matched"]
+    },
+    {
+      "caseName": "numbered_zero_padded",
+      "family": "2_numbered_series",
+      "reason": "Numbered series with zero-padded volume number matches volume",
+      "rawTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 03",
+      "authoritativeTotal": 98000,
+      "searchResults": [
+        {
+          "deckId": 200,
+          "parentDeckId": null,
+          "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+          "childrenDeckCount": 5
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 200,
+            "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+            "childrenDeckCount": 5
+          },
+          "subDecks": [
+            { "deckId": 201, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 1", "characterCount": 100000 },
+            { "deckId": 202, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 2", "characterCount": 101000 },
+            { "deckId": 203, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 3", "characterCount": 98000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 200,
+      "expectedSubdeckId": 203,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 3 matched"]
+    },
+    {
+      "caseName": "numbered_explicit_vol",
+      "family": "2_numbered_series",
+      "reason": "Numbered series with explicit Vol. prefix matches volume",
+      "rawTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 Vol. 4",
+      "authoritativeTotal": 105000,
+      "searchResults": [
+        {
+          "deckId": 200,
+          "parentDeckId": null,
+          "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+          "childrenDeckCount": 5
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 200,
+            "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+            "childrenDeckCount": 5
+          },
+          "subDecks": [
+            { "deckId": 201, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 1", "characterCount": 100000 },
+            { "deckId": 204, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 4", "characterCount": 105000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 200,
+      "expectedSubdeckId": 204,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 4 matched"]
+    },
+    {
+      "caseName": "numbered_japanese_kan",
+      "family": "2_numbered_series",
+      "reason": "Numbered series with Japanese volume marker 巻 matches volume",
+      "rawTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 5巻",
+      "authoritativeTotal": 110000,
+      "searchResults": [
+        {
+          "deckId": 200,
+          "parentDeckId": null,
+          "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+          "childrenDeckCount": 5
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 200,
+            "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件",
+            "childrenDeckCount": 5
+          },
+          "subDecks": [
+            { "deckId": 201, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 1", "characterCount": 100000 },
+            { "deckId": 205, "originalTitle": "お隣の天使様にいつの間にか駄目人間にされていた件 5", "characterCount": 109000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 200,
+      "expectedSubdeckId": 205,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 5 matched"]
+    },
+    {
+      "caseName": "multilingual_consistent_variants",
+      "family": "3_multilingual_consistency",
+      "reason": "Consistent original/English/romaji volume forms match High",
+      "rawTitle": "ダンジョンに出会いを求めるのは間違っているだろうか 14",
+      "authoritativeTotal": 130000,
+      "searchResults": [
+        {
+          "deckId": 300,
+          "parentDeckId": null,
+          "originalTitle": "ダンジョンに出会いを求めるのは間違っているだろうか",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 300,
+            "originalTitle": "ダンジョンに出会いを求めるのは間違っているだろうか",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            {
+              "deckId": 314,
+              "originalTitle": "ダンジョンに出会いを求めるのは間違っているだろうか 14",
+              "romajiTitle": "Dungeon ni Deai o Motomeru no wa Machigatteiru Darou ka 14",
+              "englishTitle": "Is It Wrong to Try to Pick Up Girls in a Dungeon? Vol. 14",
+              "characterCount": 130000,
+              "coverName": "https://cdn.jiten.moe/danmachi14.jpg"
+            }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 300,
+      "expectedSubdeckId": 314,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Exact original base title matched", "Volume 14 matched"]
+    },
+    {
+      "caseName": "conflicting_cross_language_volumes",
+      "family": "4_conflicting_variants",
+      "reason": "Conflicting volume numbers between English and Original title variants are disqualified",
+      "rawTitle": "Conflict Series 1",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 400,
+          "parentDeckId": null,
+          "originalTitle": "Conflict Series",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 400,
+            "originalTitle": "Conflict Series",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            {
+              "deckId": 401,
+              "originalTitle": "Conflict Series 1",
+              "englishTitle": "Conflict Series Vol. 2",
+              "characterCount": 100000
+            }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "None",
+      "expectedDeckId": null,
+      "expectedSubdeckId": null,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Conflicting volume markers across candidate title variants"]
+    },
+    {
+      "caseName": "ambiguous_adaptation_close_runner_up",
+      "family": "5_close_margin",
+      "reason": "Two candidates tied within 10 point margin require review",
+      "rawTitle": "Ambiguous Series 1",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 500,
+          "parentDeckId": null,
+          "originalTitle": "Ambiguous Series",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 500,
+            "originalTitle": "Ambiguous Series",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 501, "originalTitle": "Ambiguous Series 1", "characterCount": 100000 },
+            { "deckId": 502, "originalTitle": "Ambiguous Series 1", "characterCount": 100000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 500,
+      "expectedSubdeckId": 501,
+      "autoSelectAllowed": false,
+      "expectedRunnerUpMargin": 0,
+      "expectedEvidence": ["Close runner-up"]
+    },
+    {
+      "caseName": "partial_containment_title_match",
+      "family": "6_partial_match",
+      "reason": "Partial/containment title match must not produce High confidence",
+      "rawTitle": "やはり俺の青春ラブコメはまちがっている。 1",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 600,
+          "parentDeckId": null,
+          "originalTitle": "やはり俺の青春ラブコメはまちがっている。結",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 600,
+            "originalTitle": "やはり俺の青春ラブコメはまちがっている。結",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 601, "originalTitle": "やはり俺の青春ラブコメはまちがっている。結 1", "characterCount": 100000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 600,
+      "expectedSubdeckId": 601,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Partial title match requires review"]
+    },
+    {
+      "caseName": "fractional_volume_four_point_five",
+      "family": "7_fractional_volumes",
+      "reason": "Fractional volume 4.5 is treated as special and requires review",
+      "rawTitle": "ようこそ実力至上主義の教室へ 4.5",
+      "authoritativeTotal": 120000,
+      "searchResults": [
+        {
+          "deckId": 700,
+          "parentDeckId": null,
+          "originalTitle": "ようこそ実力至上主義の教室へ",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 700,
+            "originalTitle": "ようこそ実力至上主義の教室へ",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 704, "originalTitle": "ようこそ実力至上主義の教室へ 4", "characterCount": 115000 },
+            { "deckId": 745, "originalTitle": "ようこそ実力至上主義の教室へ 4.5", "characterCount": 120000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 700,
+      "expectedSubdeckId": 745,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Special volume requires review"]
+    },
+    {
+      "caseName": "fractional_volume_eleven_point_five",
+      "family": "7_fractional_volumes",
+      "reason": "Fractional volume 11.5 is treated as special and requires review",
+      "rawTitle": "ようこそ実力至上主義の教室へ 11.5",
+      "authoritativeTotal": 115000,
+      "searchResults": [
+        {
+          "deckId": 700,
+          "parentDeckId": null,
+          "originalTitle": "ようこそ実力至上主義の教室へ",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 700,
+            "originalTitle": "ようこそ実力至上主義の教室へ",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 711, "originalTitle": "ようこそ実力至上主義の教室へ 11", "characterCount": 110000 },
+            { "deckId": 715, "originalTitle": "ようこそ実力至上主義の教室へ 11.5", "characterCount": 115000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 700,
+      "expectedSubdeckId": 715,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Special volume requires review"]
+    },
+    {
+      "caseName": "special_ex_volume",
+      "family": "8_special_markers",
+      "reason": "EX volume marker is special and requires review",
+      "rawTitle": "Re:ゼロから始める異世界生活 Ex 1",
+      "authoritativeTotal": 95000,
+      "searchResults": [
+        {
+          "deckId": 800,
+          "parentDeckId": null,
+          "originalTitle": "Re:ゼロから始める異世界生活",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 800,
+            "originalTitle": "Re:ゼロから始める異世界生活",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 801, "originalTitle": "Re:ゼロから始める異世界生活 Ex 1", "characterCount": 95000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 800,
+      "expectedSubdeckId": 801,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Special volume requires review"]
+    },
+    {
+      "caseName": "special_short_stories",
+      "family": "8_special_markers",
+      "reason": "Short stories volume marker is special and requires review",
+      "rawTitle": "痛いのは嫌なので防御力に極振りしたいと思います。 短編集 1",
+      "authoritativeTotal": 80000,
+      "searchResults": [
+        {
+          "deckId": 850,
+          "parentDeckId": null,
+          "originalTitle": "痛いのは嫌なので防御力に極振りしたいと思います。",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 850,
+            "originalTitle": "痛いのは嫌なので防御力に極振りしたいと思います。",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 851, "originalTitle": "痛いのは嫌なので防御力に極振りしたいと思います。 短編集 1", "characterCount": 80000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 850,
+      "expectedSubdeckId": 851,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Special volume requires review"]
+    },
+    {
+      "caseName": "special_arc_school_year",
+      "family": "8_special_markers",
+      "reason": "School-year arc volume marker is special and requires review",
+      "rawTitle": "ようこそ実力至上主義の教室へ 2年生編 1",
+      "authoritativeTotal": 110000,
+      "searchResults": [
+        {
+          "deckId": 700,
+          "parentDeckId": null,
+          "originalTitle": "ようこそ実力至上主義の教室へ",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 700,
+            "originalTitle": "ようこそ実力至上主義の教室へ",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 791, "originalTitle": "ようこそ実力至上主義の教室へ 2年生編 1", "characterCount": 110000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 700,
+      "expectedSubdeckId": 791,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Special volume requires review"]
+    },
+    {
+      "caseName": "japanese_position_marker_upper",
+      "family": "9_position_markers",
+      "reason": "Japanese position marker 上 matches position volume with High confidence",
+      "rawTitle": "空の境界 (上)",
+      "authoritativeTotal": 120000,
+      "searchResults": [
+        {
+          "deckId": 900,
+          "parentDeckId": null,
+          "originalTitle": "空の境界",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 900,
+            "originalTitle": "空の境界",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 901, "originalTitle": "空の境界 (上)", "characterCount": 120000 },
+            { "deckId": 902, "originalTitle": "空の境界 (下)", "characterCount": 130000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 900,
+      "expectedSubdeckId": 901,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 上 matched"]
+    },
+    {
+      "caseName": "japanese_position_marker_lower",
+      "family": "9_position_markers",
+      "reason": "Japanese position marker 下 matches position volume with High confidence",
+      "rawTitle": "空の境界 (下)",
+      "authoritativeTotal": 130000,
+      "searchResults": [
+        {
+          "deckId": 900,
+          "parentDeckId": null,
+          "originalTitle": "空の境界",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 900,
+            "originalTitle": "空の境界",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 901, "originalTitle": "空の境界 (上)", "characterCount": 120000 },
+            { "deckId": 902, "originalTitle": "空の境界 (下)", "characterCount": 130000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 900,
+      "expectedSubdeckId": 902,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 下 matched"]
+    },
+    {
+      "caseName": "missing_authoritative_total",
+      "family": "10_missing_totals",
+      "reason": "Numbered volume with missing authoritative total caps at 75 and produces Review",
+      "rawTitle": "無職転生 ～異世界行ったら本気だす～ 1",
+      "authoritativeTotal": null,
+      "searchResults": [
+        {
+          "deckId": 1000,
+          "parentDeckId": null,
+          "originalTitle": "無職転生 ～異世界行ったら本気だす～",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1000,
+            "originalTitle": "無職転生 ～異世界行ったら本気だす～",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1001, "originalTitle": "無職転生 ～異世界行ったら本気だす～ 1", "characterCount": 140000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 1000,
+      "expectedSubdeckId": 1001,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["No authoritative TTSU character count available"]
+    },
+    {
+      "caseName": "total_at_fifteen_percent_boundary",
+      "family": "11_character_boundaries",
+      "reason": "Total at the exact 15% boundary scores 20 points and matches High",
+      "rawTitle": "Boundary Test Novel 1",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 1100,
+          "parentDeckId": null,
+          "originalTitle": "Boundary Test Novel",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1100,
+            "originalTitle": "Boundary Test Novel",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1101, "originalTitle": "Boundary Test Novel 1", "characterCount": 85000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1100,
+      "expectedSubdeckId": 1101,
+      "autoSelectAllowed": true,
+      "expectedCharacterCountScore": 20,
+      "expectedEvidence": ["TTSU total differs by 15.0 %"]
+    },
+    {
+      "caseName": "total_just_outside_fifteen_percent_boundary",
+      "family": "11_character_boundaries",
+      "reason": "Total just outside 15% receives 10 character-count points",
+      "rawTitle": "Boundary Test Novel 15",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 1100,
+          "parentDeckId": null,
+          "originalTitle": "Boundary Test Novel",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1100,
+            "originalTitle": "Boundary Test Novel",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1115, "originalTitle": "Boundary Test Novel 15", "characterCount": 84999 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1100,
+      "expectedSubdeckId": 1115,
+      "autoSelectAllowed": true,
+      "expectedCharacterCountScore": 10,
+      "expectedEvidence": ["TTSU total differs by 15.0 %"]
+    },
+    {
+      "caseName": "total_at_thirty_percent_boundary",
+      "family": "11_character_boundaries",
+      "reason": "Total at the exact 30% boundary scores 10 points and matches High with 85 points",
+      "rawTitle": "Boundary Test Novel 2",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 1100,
+          "parentDeckId": null,
+          "originalTitle": "Boundary Test Novel",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1100,
+            "originalTitle": "Boundary Test Novel",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1102, "originalTitle": "Boundary Test Novel 2", "characterCount": 70000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1100,
+      "expectedSubdeckId": 1102,
+      "autoSelectAllowed": true,
+      "expectedCharacterCountScore": 10,
+      "expectedEvidence": ["TTSU total differs by 30.0 %"]
+    },
+    {
+      "caseName": "total_outside_thirty_percent_boundary",
+      "family": "11_character_boundaries",
+      "reason": "Total just outside 30% receives 0 points, resulting in Review (75 points)",
+      "rawTitle": "Boundary Test Novel 3",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 1100,
+          "parentDeckId": null,
+          "originalTitle": "Boundary Test Novel",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1100,
+            "originalTitle": "Boundary Test Novel",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1103, "originalTitle": "Boundary Test Novel 3", "characterCount": 69999 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 1100,
+      "expectedSubdeckId": 1103,
+      "autoSelectAllowed": false,
+      "expectedCharacterCountScore": 0,
+      "expectedEvidence": ["exceeds 30%"]
+    },
+    {
+      "caseName": "misleading_numeric_year_title",
+      "family": "12_misleading_numbers",
+      "reason": "Pure numeric title '1984' retained as base title, not volume marker",
+      "rawTitle": "1984",
+      "authoritativeTotal": 90000,
+      "searchResults": [
+        {
+          "deckId": 1201,
+          "parentDeckId": null,
+          "originalTitle": "1984",
+          "characterCount": 90000,
+          "childrenDeckCount": 0
+        }
+      ],
+      "deckDetails": [
+        {
+          "mainDeck": {
+            "deckId": 1201,
+            "originalTitle": "1984",
+            "characterCount": 90000,
+            "childrenDeckCount": 0
+          },
+          "subDecks": []
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1201,
+      "expectedSubdeckId": null,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Standalone deck with no volume markers"]
+    },
+    {
+      "caseName": "misleading_number_in_title_with_episode",
+      "family": "12_misleading_numbers",
+      "reason": "Title starting with number '86' keeps '86' in base title, Episode 1 is special requiring review",
+      "rawTitle": "86―エイティシックス― Ep.1",
+      "authoritativeTotal": 92000,
+      "searchResults": [
+        {
+          "deckId": 1250,
+          "parentDeckId": null,
+          "originalTitle": "86―エイティシックス―",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1250,
+            "originalTitle": "86―エイティシックス―",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1251, "originalTitle": "86―エイティシックス― Ep.1", "characterCount": 92000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 1250,
+      "expectedSubdeckId": 1251,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["Special volume requires review"]
+    },
+    {
+      "caseName": "misleading_internal_number_in_title",
+      "family": "12_misleading_numbers",
+      "reason": "Internal title number '2001' preserved in base title, terminal 1 matched as volume",
+      "rawTitle": "2001夜物語 1",
+      "authoritativeTotal": 88000,
+      "searchResults": [
+        {
+          "deckId": 1280,
+          "parentDeckId": null,
+          "originalTitle": "2001夜物語",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1280,
+            "originalTitle": "2001夜物語",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1281, "originalTitle": "2001夜物語 1", "characterCount": 88000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1280,
+      "expectedSubdeckId": 1281,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 1 matched"]
+    },
+    {
+      "caseName": "parent_with_children_disqualified",
+      "family": "13_parent_disqualification",
+      "reason": "Parent deck with children can never be linked directly to a work",
+      "rawTitle": "Parent Series Deck",
+      "authoritativeTotal": 100000,
+      "searchResults": [
+        {
+          "deckId": 1300,
+          "parentDeckId": null,
+          "originalTitle": "Parent Series Deck",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1300,
+            "originalTitle": "Parent Series Deck",
+            "childrenDeckCount": 2
+          },
+          "subDecks": []
+        }
+      ],
+      "expectedStatus": "NoCandidates",
+      "expectedConfidence": "None",
+      "expectedDeckId": null,
+      "expectedSubdeckId": null,
+      "autoSelectAllowed": false,
+      "expectedEvidence": []
+    },
+    {
+      "caseName": "child_result_resolved_through_parent",
+      "family": "14_child_expansion",
+      "reason": "Search returning child deck resolves its parent deck detail and matches the verified subdeck",
+      "rawTitle": "Parent Verified Series 1",
+      "authoritativeTotal": 75000,
+      "searchResults": [
+        {
+          "deckId": 1401,
+          "parentDeckId": 1400,
+          "originalTitle": "Parent Verified Series 1",
+          "characterCount": 75000,
+          "childrenDeckCount": 0
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1400,
+            "originalTitle": "Parent Verified Series",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1401, "originalTitle": "Parent Verified Series 1", "characterCount": 75000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1400,
+      "expectedSubdeckId": 1401,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Exact original base title matched", "Volume 1 matched"]
+    },
+    {
+      "caseName": "duplicate_search_paths_deduplicated",
+      "family": "15_deduplication",
+      "reason": "Duplicate search items resolving to the same parent are deduplicated and queried once",
+      "rawTitle": "Deduplication Novel 1",
+      "authoritativeTotal": 80000,
+      "searchResults": [
+        { "deckId": 1501, "parentDeckId": 1500, "originalTitle": "Deduplication Novel 1", "characterCount": 80000 },
+        { "deckId": 1502, "parentDeckId": 1500, "originalTitle": "Deduplication Novel 2", "characterCount": 82000 },
+        { "deckId": 1500, "parentDeckId": null, "originalTitle": "Deduplication Novel", "childrenDeckCount": 2 }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1500,
+            "originalTitle": "Deduplication Novel",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 1501, "originalTitle": "Deduplication Novel 1", "characterCount": 80000 },
+            { "deckId": 1502, "originalTitle": "Deduplication Novel 2", "characterCount": 82000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1500,
+      "expectedSubdeckId": 1501,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 1 matched"]
+    },
+    {
+      "caseName": "cover_neutrality_proof",
+      "family": "16_cover_neutrality",
+      "reason": "Presence or absence of cover has zero effect on candidate score and confidence",
+      "rawTitle": "Cover Neutrality Novel 1",
+      "authoritativeTotal": 70000,
+      "searchResults": [
+        {
+          "deckId": 1600,
+          "parentDeckId": null,
+          "originalTitle": "Cover Neutrality Novel",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1600,
+            "originalTitle": "Cover Neutrality Novel",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1601, "originalTitle": "Cover Neutrality Novel 1", "characterCount": 70000, "coverName": "" }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1600,
+      "expectedSubdeckId": 1601,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 1 matched"]
+    },
+    {
+      "caseName": "parent_cover_fallback_neutrality",
+      "family": "17_parent_cover_fallback",
+      "reason": "Parent cover fallback retains cover evidence but has zero effect on score",
+      "rawTitle": "Parent Cover Fallback Novel 1",
+      "authoritativeTotal": 70000,
+      "searchResults": [
+        {
+          "deckId": 1700,
+          "parentDeckId": null,
+          "originalTitle": "Parent Cover Fallback Novel",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1700,
+            "originalTitle": "Parent Cover Fallback Novel",
+            "childrenDeckCount": 1,
+            "coverName": "https://cdn.jiten.moe/parent-fallback.jpg"
+          },
+          "subDecks": [
+            { "deckId": 1701, "originalTitle": "Parent Cover Fallback Novel 1", "characterCount": 70000, "coverName": "" }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 1700,
+      "expectedSubdeckId": 1701,
+      "autoSelectAllowed": true,
+      "expectedCoverEvidence": "ParentFallback",
+      "expectedEvidence": ["Volume 1 matched"]
+    },
+    {
+      "caseName": "tied_candidates_deterministic_order",
+      "family": "18_tied_candidates",
+      "reason": "Tied candidates have 0 margin, dropping confidence to Review, and sort deterministically",
+      "rawTitle": "Tied Series Novel 1",
+      "authoritativeTotal": 65000,
+      "searchResults": [
+        {
+          "deckId": 1800,
+          "parentDeckId": null,
+          "originalTitle": "Tied Series Novel",
+          "childrenDeckCount": 2
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1800,
+            "originalTitle": "Tied Series Novel",
+            "childrenDeckCount": 2
+          },
+          "subDecks": [
+            { "deckId": 1802, "originalTitle": "Tied Series Novel 1", "characterCount": 65000 },
+            { "deckId": 1801, "originalTitle": "Tied Series Novel 1", "characterCount": 65000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "Review",
+      "expectedDeckId": 1800,
+      "expectedSubdeckId": 1801,
+      "autoSelectAllowed": false,
+      "expectedRunnerUpMargin": 0,
+      "expectedEvidence": ["Close runner-up"]
+    },
+    {
+      "caseName": "unrelated_low_score_candidates",
+      "family": "19_unrelated_candidates",
+      "reason": "Unrelated candidates with score below 60 produce None confidence",
+      "rawTitle": "完全な別作品のタイトル 1",
+      "authoritativeTotal": 50000,
+      "searchResults": [
+        {
+          "deckId": 1900,
+          "parentDeckId": null,
+          "originalTitle": "全く関係のない作品",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 1900,
+            "originalTitle": "全く関係のない作品",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 1901, "originalTitle": "全く関係のない作品 1", "characterCount": 50000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "None",
+      "expectedDeckId": null,
+      "expectedSubdeckId": null,
+      "autoSelectAllowed": false,
+      "expectedEvidence": ["below review threshold"]
+    },
+    {
+      "caseName": "multibook_batch_mixed_outcomes",
+      "family": "20_multibook_batch",
+      "reason": "Multi-book batch mixes High, Review, None, and unavailable books without cross-contamination",
+      "rawTitle": "Batch Novel Alpha 1",
+      "authoritativeTotal": 75000,
+      "searchResults": [
+        {
+          "deckId": 2000,
+          "parentDeckId": null,
+          "originalTitle": "Batch Novel Alpha",
+          "childrenDeckCount": 1
+        }
+      ],
+      "deckDetails": [
+        {
+          "parentDeck": {
+            "deckId": 2000,
+            "originalTitle": "Batch Novel Alpha",
+            "childrenDeckCount": 1
+          },
+          "subDecks": [
+            { "deckId": 2001, "originalTitle": "Batch Novel Alpha 1", "characterCount": 75000 }
+          ]
+        }
+      ],
+      "expectedStatus": "Matched",
+      "expectedConfidence": "High",
+      "expectedDeckId": 2000,
+      "expectedSubdeckId": 2001,
+      "autoSelectAllowed": true,
+      "expectedEvidence": ["Volume 1 matched"]
+    }
+  ]
+}
