@@ -15,7 +15,11 @@
 }
 
 <article class="media-card">
-    <a class="media-card-link" asp-page="/Library/Details" asp-route-id="@Model.Id">
+    <div class="media-card-link">
+        <a class="media-details-overlay"
+           asp-page="/Library/Details"
+           asp-route-id="@Model.Id"
+           aria-label="Open @Model.Title details"></a>
         <div class="media-card-cover media-cover-@Model.MediaType.ToString().ToLowerInvariant() @(Model.CoverUrl is not null ? "has-image" : string.Empty)"
              aria-hidden="true"
              data-cover-frame>
@@ -47,6 +51,17 @@
                 {
                     <span class="source-tag"><i></i>ッツ &times;@Model.SessionCount</span>
                 }
+                @if (Model.CoverSource == Kiseki.Core.Entities.MediaCoverSource.GoogleBooks && !string.IsNullOrWhiteSpace(Model.CoverProviderItemId))
+                {
+                    <span class="source-tag">
+                        <a href="https://books.google.com/books?id=@Model.CoverProviderItemId"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           class="google-books-item-link text-inherit text-decoration-none">
+                            Google Books
+                        </a>
+                    </span>
+                }
             </div>
 
             <div class="media-card-progress">
@@ -60,6 +75,5 @@
                 </span>
             </div>
         </div>
-    </a>
+    </div>
 </article>
-

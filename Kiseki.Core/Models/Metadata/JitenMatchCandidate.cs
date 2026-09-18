@@ -10,6 +10,9 @@ public sealed record JitenMatchCandidate
     public string OriginalTitle { get; init; } = string.Empty;
     public string RomajiTitle { get; init; } = string.Empty;
     public string EnglishTitle { get; init; } = string.Empty;
+    public string? ParentOriginalTitle { get; init; }
+    public string? ParentRomajiTitle { get; init; }
+    public string? ParentEnglishTitle { get; init; }
     public int CharacterCount { get; init; }
     public int ChildrenDeckCount { get; init; }
     public string? CoverUrl { get; init; }
@@ -22,24 +25,40 @@ public sealed record JitenMatchCandidate
     {
         get
         {
-            if (!string.IsNullOrWhiteSpace(OriginalTitle))
+            var childTitle = FirstNonEmpty(OriginalTitle, EnglishTitle, RomajiTitle);
+
+            if (IsSubdeck)
             {
-                return OriginalTitle.Trim();
+                var parentTitle = FirstNonEmpty(ParentOriginalTitle, ParentEnglishTitle, ParentRomajiTitle);
+                if (!string.IsNullOrWhiteSpace(parentTitle))
+                {
+                    if (string.IsNullOrWhiteSpace(childTitle))
+                    {
+                        return $"{parentTitle.Trim()} — Subdeck {SubdeckId}";
+                    }
+
+                    var trimmedChild = childTitle.Trim();
+                    var trimmedParent = parentTitle.Trim();
+                    if (trimmedChild.StartsWith(trimmedParent, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return trimmedChild;
+                    }
+
+                    return $"{trimmedParent} — {trimmedChild}";
+                }
             }
 
-            if (!string.IsNullOrWhiteSpace(EnglishTitle))
+            if (!string.IsNullOrWhiteSpace(childTitle))
             {
-                return EnglishTitle.Trim();
-            }
-
-            if (!string.IsNullOrWhiteSpace(RomajiTitle))
-            {
-                return RomajiTitle.Trim();
+                return childTitle.Trim();
             }
 
             return $"Jiten deck {SubdeckId ?? DeckId}";
         }
     }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
 
     public static JitenMatchCandidate FromSelection(JitenMediaSelection selection)
     {
@@ -52,6 +71,9 @@ public sealed record JitenMatchCandidate
             OriginalTitle = selection.OriginalTitle,
             RomajiTitle = selection.RomajiTitle,
             EnglishTitle = selection.EnglishTitle,
+            ParentOriginalTitle = selection.ParentOriginalTitle,
+            ParentRomajiTitle = selection.ParentRomajiTitle,
+            ParentEnglishTitle = selection.ParentEnglishTitle,
             CharacterCount = selection.CharacterCount,
             ChildrenDeckCount = selection.ChildrenDeckCount,
             CoverUrl = selection.CoverUrl,

@@ -41,7 +41,20 @@ public sealed record TtsuImportPlan(
 }
 public sealed record TtsuMatch(Guid? WorkId, string Reason, bool IsAmbiguous = false);
 public sealed record TtsuTarget(Guid Id, string Title);
-public sealed record TtsuMetadataImportRequest(JitenMediaSelection? Selection);
+public sealed record TtsuMetadataImportRequest(
+    JitenMediaSelection? Selection,
+    GoogleBooks.GoogleBooksCoverSelection? GoogleCover = null,
+    Covers.ExternalCoverSelection? ExternalCover = null)
+{
+    public Covers.ExternalCoverSelection? EffectiveCover =>
+        ExternalCover ?? (GoogleCover is not null
+            ? new Covers.ExternalCoverSelection(
+                Covers.ExternalCoverProvider.GoogleBooks,
+                GoogleCover.CoverUrl,
+                GoogleCover.VolumeId,
+                GoogleCover.AttributionLink)
+            : null);
+}
 
 public sealed record TtsuImportRequest(
     DTOs.TtsuBookContainer Book,

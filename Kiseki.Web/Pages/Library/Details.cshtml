@@ -78,16 +78,16 @@
 <div class="detail-grid">
     <section class="content-card detail-primary">
         <div class="detail-overview">
-            <div class="detail-cover @(Model.Work.JitenCoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
-                @if (Model.Work.JitenCoverUrl is not null)
+            <div class="detail-cover @(Model.Work.CoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                @if (Model.Work.CoverUrl is not null)
                 {
-                    <img src="@Model.Work.JitenCoverUrl"
+                    <img src="@Model.Work.CoverUrl"
                          alt="Cover for @Model.Work.Title"
                          loading="lazy"
                          referrerpolicy="no-referrer"
                          data-cover-image />
                 }
-                <span data-cover-fallback hidden="@(Model.Work.JitenCoverUrl is not null ? "hidden" : null)">@Model.Work.MediaType</span>
+                <span data-cover-fallback hidden="@(Model.Work.CoverUrl is not null ? "hidden" : null)">@Model.Work.MediaType</span>
                 <button type="button"
                         class="cover-edit-trigger cover-edit-overlay"
                         data-cover-edit-trigger
@@ -173,6 +173,31 @@
                 <div data-metadata-manual-row><dt>Manual total</dt><dd data-metadata-manual-total>@manualCharacters.ToString("N0")</dd></div>
             }
             <div><dt>Total source</dt><dd data-metadata-source>@Model.Work.CharacterTotalSource</dd></div>
+            <div>
+                <dt>Cover source</dt>
+                <dd data-metadata-cover-source>
+                    @Model.Work.CoverSourceLabel
+                    @if (Model.Work.CoverSource == Kiseki.Core.Entities.MediaCoverSource.GoogleBooks && !string.IsNullOrWhiteSpace(Model.Work.CoverProviderItemId))
+                    {
+                        <div class="google-books-attribution" style="margin-top: 4px;">
+                            <a href="https://books.google.com/books?id=@Model.Work.CoverProviderItemId"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="text-decoration-none"
+                               style="font-size: 0.85em;">
+                                View on Google Books
+                            </a>
+                            <div style="margin-top: 4px;">
+                                <img src="https://books.google.com/googlebooks/images/poweredby.png"
+                                     alt="Powered by Google"
+                                     loading="lazy"
+                                     referrerpolicy="no-referrer"
+                                     style="height: 14px; width: auto; vertical-align: middle;" />
+                            </div>
+                        </div>
+                    }
+                </dd>
+            </div>
         </dl>
     </aside>
 </div>
@@ -197,7 +222,7 @@
             <input type="url"
                    class="cover-edit-input"
                    data-cover-edit-input
-                   value="@Model.Work.JitenCoverUrl"
+                   value="@Model.Work.CoverUrl"
                    maxlength="2048"
                    aria-label="Cover image URL"
                    aria-describedby="cover-edit-error" />

@@ -103,8 +103,12 @@ namespace Kiseki.Core
             {
                 entity.Property(work => work.MediaType)
                     .HasDefaultValue(MediaType.Book);
-                entity.Property(work => work.JitenCoverUrl)
+                entity.Property(work => work.CoverUrl)
                     .HasMaxLength(2048);
+                entity.Property(work => work.CoverSource)
+                    .HasDefaultValue(MediaCoverSource.None);
+                entity.Property(work => work.CoverProviderItemId)
+                    .HasMaxLength(128);
 
                 entity.HasIndex(work => work.MediaSeriesId);
                 entity.HasIndex(work => work.JitenDeckId);
@@ -123,6 +127,12 @@ namespace Kiseki.Core
                     table.HasCheckConstraint(
                         "CK_MediaWorks_TtsuCharacterCount",
                         "\"TtsuCharacterCount\" IS NULL OR \"TtsuCharacterCount\" > 0");
+                    table.HasCheckConstraint(
+                        "CK_MediaWorks_CoverUrlAndSource",
+                        "(\"CoverUrl\" IS NULL AND \"CoverSource\" = 0) OR (\"CoverUrl\" IS NOT NULL AND \"CoverSource\" <> 0)");
+                    table.HasCheckConstraint(
+                        "CK_MediaWorks_CoverProviderItemId",
+                        "(\"CoverSource\" IN (5, 6) AND \"CoverProviderItemId\" IS NOT NULL) OR (\"CoverSource\" NOT IN (5, 6) AND \"CoverProviderItemId\" IS NULL)");
                 });
             });
         }

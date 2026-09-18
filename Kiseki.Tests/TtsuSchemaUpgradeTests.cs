@@ -135,4 +135,162 @@ public sealed class TtsuSchemaUpgradeTests
         db.Context.ImmersionLogs.Add(new() { MediaWorkId = another.Id, TtsuBindingId = workId, Date = new(2026, 9, 2) });
         await Assert.ThrowsAsync<DbUpdateException>(() => db.Context.SaveChangesAsync());
     }
+
+    [Fact]
+    public async Task CoverProvenance_UpgradesLegacyJitenCoverUrl_PreservesNonNullAndNullRows_AndIsIdempotent()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+
+        // Create legacy schema with JitenCoverUrl on MediaWorks
+        await db.Context.Database.ExecuteSqlRawAsync("""
+            DROP TABLE IF EXISTS "ImmersionLogs";
+            DROP TABLE IF EXISTS "TtsuBindings";
+            DROP TABLE IF EXISTS "MediaWorks";
+            CREATE TABLE "MediaWorks" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "Title" TEXT NOT NULL,
+                "MediaType" INTEGER NOT NULL DEFAULT 1,
+                "MediaSeriesId" TEXT NULL,
+                "JitenDeckId" INTEGER NULL,
+                "JitenSubdeckId" INTEGER NULL,
+                "JitenCoverUrl" TEXT NULL,
+                "JitenCharacterCount" INTEGER NULL,
+                "TtsuCharacterCount" INTEGER NULL,
+                "ManualCharacterCountOverride" INTEGER NULL,
+                "IsCompleted" INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE "TtsuBindings" (
+                "MediaWorkId" TEXT NOT NULL PRIMARY KEY REFERENCES "MediaWorks" ("Id") ON DELETE CASCADE,
+                "OriginalTitle" TEXT NOT NULL, "FolderHint" TEXT NULL, "Version" TEXT NOT NULL
+            );
+            CREATE TABLE "ImmersionLogs" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "Date" TEXT NOT NULL,
+                "CharactersRead" INTEGER NOT NULL,
+                "TimeSpentMinutes" REAL NOT NULL,
+                "Source" TEXT NOT NULL,
+                "MediaWorkId" TEXT NULL REFERENCES "MediaWorks" ("Id")
+            );
+            """);
+
+        var work1Id = Guid.NewGuid();
+        var work2Id = Guid.NewGuid();
+        var logId = Guid.NewGuid();
+
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"JitenCoverUrl\", \"JitenCharacterCount\") VALUES ({work1Id}, {"Book With Legacy Cover"}, {1}, {"https://example.com/legacy-cover.jpg"}, {100000})");
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"JitenCoverUrl\", \"JitenCharacterCount\") VALUES ({work2Id}, {"Book Without Cover"}, {1}, {null}, {50000})");
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"TtsuBindings\" VALUES ({work1Id}, {"ORIGINAL TITLE"}, {"hint"}, {Guid.NewGuid()})");
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"ImmersionLogs\" VALUES ({logId}, {"2026-09-01"}, {200}, {15.0}, {"ttsu"}, {work1Id})");
+
+        // Run upgrade twice (verifying idempotence)
+        await SqliteSchemaUpgrade.ApplyAsync(db.Context);
+        await SqliteSchemaUpgrade.ApplyAsync(db.Context);
+
+        db.Context.ChangeTracker.Clear();
+
+        var upgraded1 = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == work1Id);
+        Assert.Equal("Book With Legacy Cover", upgraded1.Title);
+        Assert.Equal("https://example.com/legacy-cover.jpg", upgraded1.CoverUrl);
+        Assert.Equal(MediaCoverSource.LegacyUnknown, upgraded1.CoverSource);
+        Assert.Equal(100000, upgraded1.JitenCharacterCount);
+        Assert.Single(upgraded1.Logs);
+        Assert.Equal(200, upgraded1.Logs[0].CharactersRead);
+
+        var upgraded2 = await db.Context.MediaWorks.SingleAsync(w => w.Id == work2Id);
+        Assert.Equal("Book Without Cover", upgraded2.Title);
+        Assert.Null(upgraded2.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, upgraded2.CoverSource);
+        Assert.Equal(50000, upgraded2.JitenCharacterCount);
+
+        var binding = await db.Context.TtsuBindings.SingleAsync(b => b.MediaWorkId == work1Id);
+        Assert.Equal("ORIGINAL TITLE", binding.OriginalTitle);
+    }
+
+    [Fact]
+    public async Task CoverProvenance_UpgradesPartialState_WhereCoverUrlExistsButCoverSourceIsMissing()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+
+        // Partial state: CoverUrl exists, but CoverSource is not yet added
+        await db.Context.Database.ExecuteSqlRawAsync("""
+            DROP TABLE IF EXISTS "ImmersionLogs";
+            DROP TABLE IF EXISTS "TtsuBindings";
+            DROP TABLE IF EXISTS "MediaWorks";
+            CREATE TABLE "MediaWorks" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "Title" TEXT NOT NULL,
+                "MediaType" INTEGER NOT NULL DEFAULT 1,
+                "MediaSeriesId" TEXT NULL,
+                "JitenDeckId" INTEGER NULL,
+                "JitenSubdeckId" INTEGER NULL,
+                "CoverUrl" TEXT NULL,
+                "JitenCharacterCount" INTEGER NULL,
+                "TtsuCharacterCount" INTEGER NULL,
+                "ManualCharacterCountOverride" INTEGER NULL,
+                "IsCompleted" INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE "TtsuBindings" (
+                "MediaWorkId" TEXT NOT NULL PRIMARY KEY REFERENCES "MediaWorks" ("Id") ON DELETE CASCADE,
+                "OriginalTitle" TEXT NOT NULL, "FolderHint" TEXT NULL, "Version" TEXT NOT NULL
+            );
+            CREATE TABLE "ImmersionLogs" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "Date" TEXT NOT NULL,
+                "CharactersRead" INTEGER NOT NULL,
+                "TimeSpentMinutes" REAL NOT NULL,
+                "Source" TEXT NOT NULL,
+                "MediaWorkId" TEXT NULL REFERENCES "MediaWorks" ("Id")
+            );
+            """);
+
+        var work1Id = Guid.NewGuid();
+        var work2Id = Guid.NewGuid();
+
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"CoverUrl\") VALUES ({work1Id}, {"Partial Book 1"}, {1}, {"https://example.com/partial.jpg"})");
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"CoverUrl\") VALUES ({work2Id}, {"Partial Book 2"}, {1}, {null})");
+
+        await SqliteSchemaUpgrade.ApplyAsync(db.Context);
+        await SqliteSchemaUpgrade.ApplyAsync(db.Context);
+
+        db.Context.ChangeTracker.Clear();
+
+        var upgraded1 = await db.Context.MediaWorks.SingleAsync(w => w.Id == work1Id);
+        Assert.Equal("https://example.com/partial.jpg", upgraded1.CoverUrl);
+        Assert.Equal(MediaCoverSource.LegacyUnknown, upgraded1.CoverSource);
+
+        var upgraded2 = await db.Context.MediaWorks.SingleAsync(w => w.Id == work2Id);
+        Assert.Null(upgraded2.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, upgraded2.CoverSource);
+    }
+
+    [Fact]
+    public async Task EnsureCreated_EnforcesCoverUrlAndSourceConsistencyConstraint()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+
+        var workValid = new MediaWork("Valid Work");
+        workValid.UpdateCoverUrl("https://example.com/valid.jpg");
+        db.Context.MediaWorks.Add(workValid);
+        await db.Context.SaveChangesAsync();
+
+        // Inserting invalid raw SQL: CoverUrl is not null, but CoverSource is 0 (None)
+        var invalidId1 = Guid.NewGuid();
+        var ex1 = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() =>
+            db.Context.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"CoverUrl\", \"CoverSource\", \"IsCompleted\") VALUES ({invalidId1}, {"Bad 1"}, {1}, {"https://example.com/bad.jpg"}, {0}, {0})"));
+        Assert.Contains("CK_MediaWorks_CoverUrlAndSource", ex1.Message);
+
+        // Inserting invalid raw SQL: CoverUrl is null, but CoverSource is 1 (LegacyUnknown)
+        var invalidId2 = Guid.NewGuid();
+        var ex2 = await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(() =>
+            db.Context.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"CoverUrl\", \"CoverSource\", \"IsCompleted\") VALUES ({invalidId2}, {"Bad 2"}, {1}, {null}, {1}, {0})"));
+        Assert.Contains("CK_MediaWorks_CoverUrlAndSource", ex2.Message);
+    }
 }

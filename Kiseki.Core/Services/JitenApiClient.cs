@@ -62,6 +62,57 @@ public sealed class JitenApiClient : IJitenApiClient
         return results;
     }
 
+    public async Task<IReadOnlyList<JitenDeckDTO>> SearchBooksBoundedAsync(
+        string query,
+        int maxResults,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query) || maxResults <= 0)
+        {
+            return [];
+        }
+
+        var encodedQuery = Uri.EscapeDataString(query.Trim());
+        var firstPage = await GetSearchPageAsync(encodedQuery, 0, cancellationToken);
+
+        if (firstPage is null)
+        {
+            return [];
+        }
+
+        var results = firstPage.Data;
+        if (results.Count >= maxResults)
+        {
+            return results.Take(maxResults).ToList();
+        }
+
+        var offset = firstPage.PageSize > 0
+            ? firstPage.CurrentOffset + firstPage.PageSize
+            : results.Count;
+
+        while (results.Count < firstPage.TotalItems && offset > 0 && results.Count < maxResults)
+        {
+            var nextPage = await GetSearchPageAsync(encodedQuery, offset, cancellationToken);
+
+            if (nextPage is null || nextPage.Data.Count == 0)
+            {
+                break;
+            }
+
+            results.AddRange(nextPage.Data);
+            if (results.Count >= maxResults)
+            {
+                return results.Take(maxResults).ToList();
+            }
+
+            offset += nextPage.PageSize > 0
+                ? nextPage.PageSize
+                : nextPage.Data.Count;
+        }
+
+        return results;
+    }
+
     public async Task<JitenDeckDetailDTO?> GetDeckDetailAsync(
         int deckId,
         CancellationToken cancellationToken = default)

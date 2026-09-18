@@ -230,7 +230,7 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
         return new JsonResult(new
         {
             success = true,
-            coverUrl = work.JitenCoverUrl
+            coverUrl = work.CoverUrl
         });
     }
 

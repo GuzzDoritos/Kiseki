@@ -110,12 +110,14 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
                     work.MediaType,
                     work.CurrentCharactersRead,
                     work.TotalCharacters,
-                    work.JitenCoverUrl,
+                    work.CoverUrl,
                     work.HasJitenLink,
                     work.IsCompleted,
                     work.Logs.Count,
                     binding?.CurrentCharacterPosition,
-                    binding?.ProgressFraction * 100d);
+                    binding?.ProgressFraction * 100d,
+                    work.CoverSource,
+                    work.CoverProviderItemId);
             })
             .ToList();
     }

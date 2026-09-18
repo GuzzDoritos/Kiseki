@@ -12,3 +12,5 @@ services:
         sync: false
       - key: KISEKI_PASSWORD
         sync: false
+      - key: GoogleBooks__ApiKey
+        sync: false

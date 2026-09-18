@@ -12,7 +12,9 @@ public sealed record MediaWorkDetailsViewModel(
     int? JitenCharacterCount,
     int? TtsuCharacterCount,
     int? ManualCharacterCountOverride,
-    string? JitenCoverUrl,
+    string? CoverUrl,
+    MediaCoverSource CoverSource,
+    string? CoverProviderItemId,
     int CharactersRead,
     int TotalCharacters,
     bool IsCompleted,
@@ -21,6 +23,7 @@ public sealed record MediaWorkDetailsViewModel(
     double? PositionProgressPercentage)
 {
     public bool HasJitenLink => JitenDeckId.HasValue;
+    public bool HasCover => !string.IsNullOrWhiteSpace(CoverUrl);
     public int SessionCount => Logs.Count;
     public double TotalTimeMinutes => Logs.Sum(log => log.TimeSpentMinutes);
 
@@ -49,17 +52,38 @@ public sealed record MediaWorkDetailsViewModel(
         int deckId => $"Deck {deckId}"
     };
 
+    public string CoverSourceLabel => CoverSource switch
+    {
+        MediaCoverSource.UserOverride => "Custom cover",
+        MediaCoverSource.LegacyUnknown => "Legacy cover",
+        MediaCoverSource.JitenSpecific => "Jiten volume cover",
+        MediaCoverSource.JitenParentFallback => "Jiten series fallback",
+        MediaCoverSource.GoogleBooks => "Google Books volume cover",
+        _ => "No cover"
+    };
+
     public string CharacterTotalSource => ManualCharacterCountOverride.HasValue
         ? "Manual override"
         : TtsuCharacterCount.HasValue
-            ? "ッツ Reader"
+            ? "ッツ"
             : JitenCharacterCount.HasValue
                 ? "Jiten"
-                : "Not set";
+                : "None";
 
-    public string TotalTimeLabel => ImmersionLogViewModel.FormatDuration(TotalTimeMinutes);
+    public string TotalTimeLabel
+    {
+        get
+        {
+            var totalMinutes = (long)Math.Round(TotalTimeMinutes);
+            var hours = totalMinutes / 60;
+            var minutes = totalMinutes % 60;
+            return hours > 0 ? $"{hours}h {minutes:D2}m" : $"{minutes}m";
+        }
+    }
 
-    public static MediaWorkDetailsViewModel Create(MediaWork work, TtsuBinding? binding = null)
+    public static MediaWorkDetailsViewModel Create(
+        MediaWork work,
+        TtsuBinding? binding = null)
     {
         ArgumentNullException.ThrowIfNull(work);
 
@@ -84,7 +108,9 @@ public sealed record MediaWorkDetailsViewModel(
             work.JitenCharacterCount,
             work.TtsuCharacterCount,
             work.ManualCharacterCountOverride,
-            work.JitenCoverUrl,
+            work.CoverUrl,
+            work.CoverSource,
+            work.CoverProviderItemId,
             work.CurrentCharactersRead,
             work.TotalCharacters,
             work.IsCompleted,
@@ -92,6 +118,9 @@ public sealed record MediaWorkDetailsViewModel(
             binding?.CurrentCharacterPosition,
             binding?.ProgressFraction * 100d);
     }
+
+    public static MediaWorkDetailsViewModel FromEntity(MediaWork work, TtsuBinding? binding = null) =>
+        Create(work, binding);
 }
 
 public sealed record ImmersionLogViewModel(

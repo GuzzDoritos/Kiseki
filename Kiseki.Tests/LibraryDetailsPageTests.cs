@@ -1,7 +1,9 @@
 using Kiseki.Core;
 using Kiseki.Core.Entities;
+using Kiseki.Web.Models;
 using Kiseki.Web.Pages.Library;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -294,7 +296,8 @@ public class LibraryDetailsPageTests
 
         var updatedWork = await database.Context.MediaWorks.FindAsync(work.Id);
         Assert.NotNull(updatedWork);
-        Assert.Equal("https://cdn.jiten.moe/covers/book.jpg", updatedWork.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/covers/book.jpg", updatedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.UserOverride, updatedWork.CoverSource);
     }
 
     [Theory]
@@ -318,7 +321,8 @@ public class LibraryDetailsPageTests
 
         var unchangedWork = await database.Context.MediaWorks.FindAsync(work.Id);
         Assert.NotNull(unchangedWork);
-        Assert.Null(unchangedWork.JitenCoverUrl);
+        Assert.Null(unchangedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, unchangedWork.CoverSource);
     }
 
     [Theory]
@@ -342,7 +346,8 @@ public class LibraryDetailsPageTests
 
         var unchangedWork = await database.Context.MediaWorks.FindAsync(work.Id);
         Assert.NotNull(unchangedWork);
-        Assert.Null(unchangedWork.JitenCoverUrl);
+        Assert.Null(unchangedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, unchangedWork.CoverSource);
     }
 
     [Fact]
@@ -356,6 +361,85 @@ public class LibraryDetailsPageTests
             CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Theory]
+    [InlineData(MediaCoverSource.None, "No cover")]
+    [InlineData(MediaCoverSource.LegacyUnknown, "Legacy cover")]
+    [InlineData(MediaCoverSource.JitenSpecific, "Jiten volume cover")]
+    [InlineData(MediaCoverSource.JitenParentFallback, "Jiten series fallback")]
+    [InlineData(MediaCoverSource.UserOverride, "Custom cover")]
+    public void CoverSourceLabel_RendersHumanReadableText_WithoutRawEnumNumbers(MediaCoverSource source, string expectedLabel)
+    {
+        var work = new MediaWork("Test Book");
+        if (source == MediaCoverSource.LegacyUnknown) TestCoverState.SetLegacyUnknown(work, "https://example.com/legacy.jpg");
+        else if (source == MediaCoverSource.JitenSpecific) work.LinkToJitenDeck(1, 100, "https://example.com/spec.jpg", MediaCoverSource.JitenSpecific);
+        else if (source == MediaCoverSource.JitenParentFallback) work.LinkToJitenDeck(1, 100, "https://example.com/fallback.jpg", MediaCoverSource.JitenParentFallback);
+        else if (source == MediaCoverSource.UserOverride) work.UpdateCoverUrl("https://example.com/user.jpg");
+
+        var vm = MediaWorkDetailsViewModel.Create(work);
+
+        Assert.Equal(expectedLabel, vm.CoverSourceLabel);
+        Assert.False(char.IsDigit(vm.CoverSourceLabel[0]));
+    }
+
+    [Fact]
+    public async Task OnGetAsync_PopulatesCoverUrlAndCoverSource()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book");
+        work.UpdateCoverUrl("https://example.com/cover.jpg");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = new DetailsModel(database.Context);
+        var result = await model.OnGetAsync(work.Id, CancellationToken.None);
+
+        Assert.IsType<PageResult>(result);
+        Assert.Equal("https://example.com/cover.jpg", model.Work.CoverUrl);
+        Assert.Equal(MediaCoverSource.UserOverride, model.Work.CoverSource);
+        Assert.Equal("Custom cover", model.Work.CoverSourceLabel);
+    }
+
+    [Fact]
+    public void CoverMarkup_UsesGenericUrl_ProvenanceLabel_AndFallbackAttributes()
+    {
+        var webRoot = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "../../../..", "Kiseki.Web"));
+        var details = File.ReadAllText(
+            Path.Combine(webRoot, "Pages", "Library", "Details.cshtml"));
+
+        Assert.Contains("Model.Work.CoverUrl", details);
+        Assert.Contains("Model.Work.CoverSourceLabel", details);
+        Assert.Contains("data-metadata-cover-source", details);
+        Assert.Contains("loading=\"lazy\"", details);
+        Assert.Contains("referrerpolicy=\"no-referrer\"", details);
+        Assert.Contains("data-cover-fallback", details);
+        Assert.Contains("View on Google Books", details);
+        Assert.Contains("https://books.google.com/googlebooks/images/poweredby.png", details);
+        Assert.Contains("Powered by Google", details);
+        Assert.DoesNotContain("JitenCoverUrl", details);
+
+        foreach (var partialName in new[] { "_MediaWorkRow.cshtml", "_MediaWorkCard.cshtml" })
+        {
+            var partial = File.ReadAllText(
+                Path.Combine(webRoot, "Pages", "Shared", partialName));
+            Assert.Contains("Model.CoverUrl", partial);
+            Assert.Contains("media-details-overlay", partial);
+            Assert.Contains("google-books-item-link", partial);
+            Assert.Contains("loading=\"lazy\"", partial);
+            Assert.Contains("referrerpolicy=\"no-referrer\"", partial);
+            Assert.Contains("data-cover-fallback", partial);
+            Assert.DoesNotContain("<a class=\"media-row-link\"", partial);
+            Assert.DoesNotContain("<a class=\"media-card-link\"", partial);
+            Assert.DoesNotContain("JitenCoverUrl", partial);
+        }
+
+        var libraryIndex = File.ReadAllText(
+            Path.Combine(webRoot, "Pages", "Library", "Index.cshtml"));
+        Assert.Contains("google-books-list-attribution", libraryIndex);
+        Assert.Contains("https://books.google.com/googlebooks/images/poweredby.png", libraryIndex);
+        Assert.Contains("Powered by Google", libraryIndex);
     }
 
     private sealed class TestDatabase : IAsyncDisposable

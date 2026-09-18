@@ -51,6 +51,16 @@ public sealed class JitenMatchService : IJitenMatchService
             throw new ArgumentOutOfRangeException(nameof(options), "MaxRetryDelay cannot be negative.");
         }
 
+        if (_options.MaxSearchResults <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxSearchResults must be positive.");
+        }
+
+        if (_options.MaxDetailBranches <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxDetailBranches must be positive.");
+        }
+
         _delayProvider = delayProvider ??
             ((delay, ct) => delay <= TimeSpan.Zero ? Task.CompletedTask : Task.Delay(delay, ct));
     }
@@ -100,8 +110,8 @@ public sealed class JitenMatchService : IJitenMatchService
         var searchCache = new ConcurrentDictionary<string, Lazy<Task<SearchResult>>>(StringComparer.OrdinalIgnoreCase);
         var detailCache = new ConcurrentDictionary<int, Lazy<Task<DeckDetailResult>>>();
 
-        // Parse titles and separate requests with unusable queries
-        var queryGroups = new Dictionary<string, List<(JitenMatchRequest Request, ParsedMediaTitle ParsedTitle)>>(StringComparer.OrdinalIgnoreCase);
+        // Prepare request contexts with search aliases
+        var requestContexts = new List<(JitenMatchRequest Request, ParsedMediaTitle ParsedTitle, IReadOnlyList<string> Aliases)>();
 
         foreach (var req in requests)
         {
@@ -114,46 +124,101 @@ public sealed class JitenMatchService : IJitenMatchService
                 continue;
             }
 
-            var queryKey = parsed.BaseTitle.Trim().Normalize(NormalizationForm.FormKC);
-            if (!queryGroups.TryGetValue(queryKey, out var list))
+            var aliases = parsed.SearchPlan?.SearchAliases is { Count: > 0 } searchAliases
+                ? searchAliases
+                : [parsed.BaseTitle.Trim().Normalize(NormalizationForm.FormKC)];
+
+            requestContexts.Add((req, parsed, aliases));
+        }
+
+        // Progressive multi-alias lookup: try primary alias first, fallback aliases only if needed
+        var maxAliases = requestContexts.Count > 0 ? requestContexts.Max(c => c.Aliases.Count) : 0;
+        for (var aliasIndex = 0; aliasIndex < maxAliases; aliasIndex++)
+        {
+            if (linkedToken.IsCancellationRequested)
             {
-                list = [];
-                queryGroups[queryKey] = list;
+                break;
             }
 
-            list.Add((req, parsed));
-        }
+            var activeRequests = new List<(JitenMatchRequest Request, ParsedMediaTitle ParsedTitle, string Alias)>();
+            foreach (var ctx in requestContexts)
+            {
+                if (aliasIndex >= ctx.Aliases.Count)
+                {
+                    continue;
+                }
 
-        // Launch processing for distinct query groups
-        var queryTasks = queryGroups.Select(kvp =>
-            ProcessQueryGroupAsync(
-                kvp.Key,
-                kvp.Value,
-                semaphore,
-                searchCache,
-                detailCache,
-                startedTasks,
-                outcomesByCorrelationId,
-                linkedToken)).ToList();
+                if (aliasIndex == 0)
+                {
+                    activeRequests.Add((ctx.Request, ctx.ParsedTitle, ctx.Aliases[0]));
+                }
+                else
+                {
+                    // Fallback pass: only try if previous pass produced NoCandidates
+                    if (outcomesByCorrelationId.TryGetValue(ctx.Request.CorrelationId, out var existingOutcome) &&
+                        existingOutcome.Status == JitenMatchStatus.NoCandidates)
+                    {
+                        activeRequests.Add((ctx.Request, ctx.ParsedTitle, ctx.Aliases[aliasIndex]));
+                    }
+                }
+            }
 
-        try
-        {
-            await Task.WhenAll(queryTasks);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && budgetCts.IsCancellationRequested)
-        {
-            // Internal time budget expired without caller cancellation
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Caller cancellation: observe all started tasks and rethrow
-            await ObserveAllTasksAsync(startedTasks);
-            throw;
-        }
-        catch
-        {
-            await ObserveAllTasksAsync(startedTasks);
-            throw;
+            if (activeRequests.Count == 0)
+            {
+                break;
+            }
+
+            var queryGroups = new Dictionary<string, (string Alias, List<(JitenMatchRequest Request, ParsedMediaTitle ParsedTitle)> Requests)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (req, parsed, alias) in activeRequests)
+            {
+                var queryKey = alias.Trim().Normalize(NormalizationForm.FormKC);
+                if (string.IsNullOrWhiteSpace(queryKey))
+                {
+                    continue;
+                }
+
+                if (!queryGroups.TryGetValue(queryKey, out var entry))
+                {
+                    entry = (alias, []);
+                    queryGroups[queryKey] = entry;
+                }
+
+                entry.Requests.Add((req, parsed));
+            }
+
+            var queryTasks = queryGroups.Select(kvp =>
+                ProcessQueryGroupAsync(
+                    kvp.Key,
+                    kvp.Value.Requests,
+                    semaphore,
+                    searchCache,
+                    detailCache,
+                    startedTasks,
+                    outcomesByCorrelationId,
+                    linkedToken,
+                    searchAlias: kvp.Value.Alias,
+                    isFallbackPass: aliasIndex > 0)).ToList();
+
+            try
+            {
+                await Task.WhenAll(queryTasks);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && budgetCts.IsCancellationRequested)
+            {
+                // Internal time budget expired without caller cancellation
+                break;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Caller cancellation: observe all started tasks and rethrow
+                await ObserveAllTasksAsync(startedTasks);
+                throw;
+            }
+            catch
+            {
+                await ObserveAllTasksAsync(startedTasks);
+                throw;
+            }
         }
 
         // Ensure all started tasks are completed and observed
@@ -171,7 +236,7 @@ public sealed class JitenMatchService : IJitenMatchService
             {
                 results.Add(JitenMatchOutcome.Unavailable(
                     req.CorrelationId,
-                    warnings: ["Operation timed out before match could complete."]));
+                    warnings: ["Request timed out before processing could complete."]));
             }
         }
 
@@ -186,7 +251,9 @@ public sealed class JitenMatchService : IJitenMatchService
         ConcurrentDictionary<int, Lazy<Task<DeckDetailResult>>> detailCache,
         ConcurrentBag<Task> startedTasks,
         ConcurrentDictionary<Guid, JitenMatchOutcome> outcomesByCorrelationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? searchAlias = null,
+        bool isFallbackPass = false)
     {
         var searchTask = searchCache.GetOrAdd(
             query,
@@ -211,24 +278,30 @@ public sealed class JitenMatchService : IJitenMatchService
 
         if (!searchResult.IsSuccess)
         {
-            foreach (var (req, _) in requestsForQuery)
+            if (!isFallbackPass)
             {
-                outcomesByCorrelationId[req.CorrelationId] = searchResult.IsRateLimited
-                    ? JitenMatchOutcome.RateLimited(req.CorrelationId, warnings: [searchResult.ErrorMessage ?? "Search request was rate limited."])
-                    : JitenMatchOutcome.Unavailable(req.CorrelationId, warnings: [searchResult.ErrorMessage ?? "Search request failed."]);
+                foreach (var (req, _) in requestsForQuery)
+                {
+                    outcomesByCorrelationId[req.CorrelationId] = searchResult.IsRateLimited
+                        ? JitenMatchOutcome.RateLimited(req.CorrelationId, warnings: [searchResult.ErrorMessage ?? "Search request was rate limited."])
+                        : JitenMatchOutcome.Unavailable(req.CorrelationId, warnings: [searchResult.ErrorMessage ?? "Search request failed."]);
+                }
             }
             return;
         }
 
         if (searchResult.Decks.Count == 0)
         {
-            foreach (var (req, parsed) in requestsForQuery)
+            if (!isFallbackPass)
             {
-                var emptyResult = _candidateScorer.Score(parsed, []);
-                outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.NoCandidates(
-                    req.CorrelationId,
-                    emptyResult,
-                    warnings: ["No search results returned for title."]);
+                foreach (var (req, parsed) in requestsForQuery)
+                {
+                    var emptyResult = _candidateScorer.Score(parsed, []);
+                    outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.NoCandidates(
+                        req.CorrelationId,
+                        emptyResult,
+                        warnings: ["No search results returned for title."]);
+                }
             }
             return;
         }
@@ -237,8 +310,11 @@ public sealed class JitenMatchService : IJitenMatchService
         var candidateList = new List<JitenMatchCandidate>();
         var branchFailures = new List<(int DeckId, bool IsRateLimited, string ErrorMessage)>();
 
-        // Collect distinct target parent deck IDs from search results
-        var targetDeckIds = new List<int>();
+        // Collect distinct target parent deck IDs from search results.
+        // Bounded discovery: prefer search rows plausibly related to query while preserving provider order,
+        // and cap distinct parent detail requests to MaxDetailBranches.
+        var priorityTargetIds = new List<int>();
+        var secondaryTargetIds = new List<int>();
         var seenTargetIds = new HashSet<int>();
 
         foreach (var deck in searchResult.Decks)
@@ -259,8 +335,24 @@ public sealed class JitenMatchService : IJitenMatchService
 
             if (seenTargetIds.Add(targetId))
             {
-                targetDeckIds.Add(targetId);
+                if (IsPlausiblyRelated(deck, query))
+                {
+                    priorityTargetIds.Add(targetId);
+                }
+                else
+                {
+                    secondaryTargetIds.Add(targetId);
+                }
             }
+        }
+
+        var candidateTargetIds = priorityTargetIds.Concat(secondaryTargetIds).ToList();
+        var totalBranchesDiscovered = candidateTargetIds.Count;
+        var targetDeckIds = candidateTargetIds.Take(_options.MaxDetailBranches).ToList();
+
+        if (totalBranchesDiscovered > _options.MaxDetailBranches)
+        {
+            branchWarnings.Add($"Bounded search inspected {_options.MaxDetailBranches} of {totalBranchesDiscovered} candidate parent branches.");
         }
 
         foreach (var targetDeckId in targetDeckIds)
@@ -352,11 +444,39 @@ public sealed class JitenMatchService : IJitenMatchService
             // Usable candidates remain (even if some branches failed)
             foreach (var (req, parsed) in requestsForQuery)
             {
-                var scored = _candidateScorer.Score(parsed, distinctCandidates, req.AuthoritativeTtsuTotal);
-                outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.Matched(
-                    req.CorrelationId,
-                    scored,
-                    branchWarnings);
+                var (filteredCandidates, incompatibleCount, noVolumeWarning, effectiveParsed) =
+                    FilterCandidatesForRequest(parsed, distinctCandidates, req.AuthoritativeTtsuTotal);
+
+                var warnings = branchWarnings.ToList();
+                if (noVolumeWarning is not null)
+                {
+                    warnings.Add(noVolumeWarning);
+                }
+
+                if (filteredCandidates.Count > 0)
+                {
+                    if (!string.IsNullOrEmpty(searchAlias) &&
+                        !string.Equals(searchAlias, parsed.BaseTitle, StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(searchAlias, parsed.SearchPlan?.CanonicalBaseTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        warnings.Add($"Matched via search alias '{searchAlias}'.");
+                    }
+
+                    var scored = _candidateScorer.Score(effectiveParsed, filteredCandidates, req.AuthoritativeTtsuTotal, incompatibleCount);
+                    outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.Matched(
+                        req.CorrelationId,
+                        scored,
+                        warnings,
+                        matchedAlias: searchAlias);
+                }
+                else if (!isFallbackPass)
+                {
+                    var emptyResult = _candidateScorer.Score(effectiveParsed, [], req.AuthoritativeTtsuTotal, incompatibleCount);
+                    outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.NoCandidates(
+                        req.CorrelationId,
+                        emptyResult,
+                        warnings);
+                }
             }
             return;
         }
@@ -364,25 +484,31 @@ public sealed class JitenMatchService : IJitenMatchService
         // No usable candidates
         if (branchFailures.Count > 0)
         {
-            // Discovery is incomplete and no successful branch produced a usable candidate.
-            var isAllRateLimited = branchFailures.All(f => f.IsRateLimited);
-            foreach (var (req, _) in requestsForQuery)
+            if (!isFallbackPass)
             {
-                outcomesByCorrelationId[req.CorrelationId] = isAllRateLimited
-                    ? JitenMatchOutcome.RateLimited(req.CorrelationId, branchWarnings)
-                    : JitenMatchOutcome.Unavailable(req.CorrelationId, branchWarnings);
+                // Discovery is incomplete and no successful branch produced a usable candidate.
+                var isAllRateLimited = branchFailures.All(f => f.IsRateLimited);
+                foreach (var (req, _) in requestsForQuery)
+                {
+                    outcomesByCorrelationId[req.CorrelationId] = isAllRateLimited
+                        ? JitenMatchOutcome.RateLimited(req.CorrelationId, branchWarnings)
+                        : JitenMatchOutcome.Unavailable(req.CorrelationId, branchWarnings);
+                }
             }
             return;
         }
 
         // Details succeeded or were partially present, but yielded no usable candidates
-        foreach (var (req, parsed) in requestsForQuery)
+        if (!isFallbackPass)
         {
-            var emptyResult = _candidateScorer.Score(parsed, distinctCandidates, req.AuthoritativeTtsuTotal);
-            outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.NoCandidates(
-                req.CorrelationId,
-                emptyResult,
-                branchWarnings);
+            foreach (var (req, parsed) in requestsForQuery)
+            {
+                var emptyResult = _candidateScorer.Score(parsed, distinctCandidates, req.AuthoritativeTtsuTotal);
+                outcomesByCorrelationId[req.CorrelationId] = JitenMatchOutcome.NoCandidates(
+                    req.CorrelationId,
+                    emptyResult,
+                    branchWarnings);
+            }
         }
     }
 
@@ -394,7 +520,7 @@ public sealed class JitenMatchService : IJitenMatchService
         try
         {
             var decks = await ExecuteWithRetryAsync(
-                ct => _jitenApiClient.SearchBooksAsync(query, ct),
+                ct => _jitenApiClient.SearchBooksBoundedAsync(query, _options.MaxSearchResults, ct),
                 semaphore,
                 cancellationToken);
 
@@ -544,6 +670,349 @@ public sealed class JitenMatchService : IJitenMatchService
                 // Suppressed after observing
             }
         }
+    }
+
+    private static bool IsPlausiblyRelated(JitenDeckDTO deck, string requestedBaseTitle)
+    {
+        if (string.IsNullOrWhiteSpace(requestedBaseTitle))
+        {
+            return false;
+        }
+
+        var titles = new[] { deck.OriginalTitle, deck.EnglishTitle, deck.RomajiTitle };
+        foreach (var title in titles)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                continue;
+            }
+
+            var parsed = MediaTitleParser.ParseTitle(title);
+            var candidateBase = string.IsNullOrWhiteSpace(parsed.BaseTitle) ? title.Trim() : parsed.BaseTitle;
+
+            if (string.Equals(requestedBaseTitle, candidateBase, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var minLength = Math.Min(requestedBaseTitle.Length, candidateBase.Length);
+            var maxLength = Math.Max(requestedBaseTitle.Length, candidateBase.Length);
+
+            if (minLength >= 4 && (double)minLength / maxLength >= 0.5)
+            {
+                if (requestedBaseTitle.Contains(candidateBase, StringComparison.OrdinalIgnoreCase) ||
+                    candidateBase.Contains(requestedBaseTitle, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private (List<JitenMatchCandidate> Candidates, int IncompatibleCount, string? Warning, ParsedMediaTitle EffectiveParsed) FilterCandidatesForRequest(
+        ParsedMediaTitle parsedTitle,
+        IReadOnlyList<JitenMatchCandidate> distinctCandidates,
+        int? authoritativeTtsuTotal)
+    {
+        var filtered = new List<JitenMatchCandidate>();
+        var incompatibleCount = 0;
+        string? warning = null;
+        var effectiveParsed = parsedTitle;
+
+        var requestedQualifier = parsedTitle.SearchPlan?.SeriesQualifier ?? MediaTitleParser.ExtractSeriesQualifier(parsedTitle.OriginalTitle);
+
+        // Step 1: Pre-filter distinct candidates by series qualifier compatibility.
+        // Known-incompatible branches must be eliminated early so they don't produce false ties.
+        var qualifierCompatible = new List<JitenMatchCandidate>();
+        foreach (var candidate in distinctCandidates)
+        {
+            var candidateQualifier = MediaTitleParser.GetCandidateSeriesQualifier(candidate);
+            if (requestedQualifier != candidateQualifier)
+            {
+                if (requestedQualifier != SeriesQualifier.Mainline || candidateQualifier != SeriesQualifier.Mainline)
+                {
+                    incompatibleCount++;
+                    continue;
+                }
+            }
+            qualifierCompatible.Add(candidate);
+        }
+
+        var requestedVolume = parsedTitle.Volume;
+
+        // Case A: Explicit Volume parsed on the title
+        if (requestedVolume is not null)
+        {
+            foreach (var candidate in qualifierCompatible)
+            {
+                if (candidate.IsStandalone)
+                {
+                    filtered.Add(candidate);
+                    continue;
+                }
+
+                if (!candidate.IsSubdeck)
+                {
+                    continue;
+                }
+
+                var extraction = MediaTitleParser.ExtractCandidateVolumes(candidate, _titleParser);
+
+                if (extraction.HasInternalConflict)
+                {
+                    var anyMatches = extraction.VariantVolumes.Any(v => requestedVolume.Matches(v.Volume));
+                    if (anyMatches)
+                    {
+                        filtered.Add(candidate);
+                    }
+                    else
+                    {
+                        incompatibleCount++;
+                    }
+                    continue;
+                }
+
+                if (extraction.PrimaryVolume is null)
+                {
+                    incompatibleCount++;
+                    continue;
+                }
+
+                if (requestedVolume.Matches(extraction.PrimaryVolume))
+                {
+                    filtered.Add(candidate);
+                }
+                else
+                {
+                    incompatibleCount++;
+                }
+            }
+
+            return (filtered, incompatibleCount, warning, effectiveParsed);
+        }
+
+        // Case B: Tentative Attached ASCII Volume Hypothesis (e.g. Ｒｅ：ゼロから始める異世界生活5)
+        if (parsedTitle.SearchPlan?.VolumeInference == VolumeInferenceKind.AttachedAsciiHypothesis &&
+            parsedTitle.SearchPlan?.Volume is not null)
+        {
+            var tentativeVolume = parsedTitle.SearchPlan.Volume;
+            var canonicalBase = parsedTitle.SearchPlan.CanonicalBaseTitle ?? parsedTitle.BaseTitle;
+            var normCanonical = NormalizeForComparison(canonicalBase);
+
+            // Provider confirmation requirements:
+            // 1. tentative base matches a Jiten parent title exactly after established normalization
+            // 2. parent has a uniquely identified child with that exact standard volume
+            // 3. no conflicting explicit marker
+            // 4. candidate compatible with requested series qualifier
+            var parentMatches = qualifierCompatible
+                .Where(c => c.IsSubdeck && IsParentExactMatch(c, normCanonical))
+                .ToList();
+
+            if (parentMatches.Count > 0)
+            {
+                var parentGroups = parentMatches.GroupBy(c => c.DeckId).ToList();
+                var confirmedCandidates = new List<JitenMatchCandidate>();
+
+                foreach (var pGroup in parentGroups)
+                {
+                    var matchingChildren = pGroup
+                        .Where(c =>
+                        {
+                            var ext = MediaTitleParser.ExtractCandidateVolumes(c, _titleParser);
+                            return ext.PrimaryVolume is not null && tentativeVolume.Matches(ext.PrimaryVolume);
+                        })
+                        .ToList();
+
+                    if (matchingChildren.Count == 1)
+                    {
+                        confirmedCandidates.Add(matchingChildren[0]);
+                    }
+                }
+
+                if (confirmedCandidates.Count == 1)
+                {
+                    var confirmed = confirmedCandidates[0];
+                    filtered.Add(confirmed);
+
+                    incompatibleCount += qualifierCompatible.Count - 1;
+                    return (filtered, incompatibleCount, null, effectiveParsed);
+                }
+            }
+
+            incompatibleCount += qualifierCompatible.Count;
+            warning = $"Attached volume hypothesis '{tentativeVolume.Number}' was not confirmed by provider series metadata.";
+            return (filtered, incompatibleCount, warning, effectiveParsed);
+        }
+
+        // Case C: Unnumbered title (check for Provider-Confirmed Implicit Volume 1)
+        // Conditions for Implicit Volume 1:
+        // 1. Cleaned title exactly matches a Jiten parent title
+        // 2. Parent is a multi-volume deck
+        // 3. Exactly one verified child represents standard Volume 1
+        // 4. No standalone exact-title deck is a better candidate
+        // 5. No special-series qualifier conflicts (already checked by qualifierCompatible)
+        // 6. Authoritative TTSU total, when available, within safe 30% tolerance
+        // 7. No competing parent produces equally strong evidence
+
+        var cleanedTitle = parsedTitle.SearchPlan?.CanonicalBaseTitle ?? parsedTitle.BaseTitle;
+        var normCleaned = NormalizeForComparison(cleanedTitle);
+
+        var exactStandalone = qualifierCompatible.FirstOrDefault(c =>
+            c.IsStandalone &&
+            (string.Equals(NormalizeForComparison(c.OriginalTitle), normCleaned, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(NormalizeForComparison(c.EnglishTitle), normCleaned, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(NormalizeForComparison(c.RomajiTitle), normCleaned, StringComparison.OrdinalIgnoreCase)));
+
+        if (exactStandalone is not null)
+        {
+            filtered.Add(exactStandalone);
+            foreach (var c in qualifierCompatible)
+            {
+                if (c != exactStandalone)
+                {
+                    incompatibleCount++;
+                }
+            }
+            return (filtered, incompatibleCount, null, effectiveParsed);
+        }
+
+        var parentSubdecks = qualifierCompatible
+            .Where(c => c.IsSubdeck && IsParentExactMatch(c, normCleaned))
+            .ToList();
+
+        if (parentSubdecks.Count > 0)
+        {
+            var parentGroups = parentSubdecks.GroupBy(c => c.DeckId).ToList();
+
+            if (parentGroups.Count == 1)
+            {
+                var pGroup = parentGroups[0];
+                var allChildrenOfParent = qualifierCompatible.Where(c => c.DeckId == pGroup.Key).ToList();
+                if (allChildrenOfParent.Count >= 2 || (allChildrenOfParent.FirstOrDefault()?.ChildrenDeckCount ?? 0) >= 2)
+                {
+                    var vol1Candidates = allChildrenOfParent
+                        .Where(c =>
+                        {
+                            var ext = MediaTitleParser.ExtractCandidateVolumes(c, _titleParser);
+                            return ext.PrimaryVolume?.Kind == VolumeKind.Standard && ext.PrimaryVolume?.Number == 1;
+                        })
+                        .ToList();
+
+                    if (vol1Candidates.Count == 1)
+                    {
+                        var vol1Candidate = vol1Candidates[0];
+
+                        bool charCountSafe = true;
+                        if (authoritativeTtsuTotal.HasValue && authoritativeTtsuTotal.Value > 0)
+                        {
+                            if (vol1Candidate.CharacterCount <= 0)
+                            {
+                                charCountSafe = false;
+                            }
+                            else
+                            {
+                                var diff = Math.Abs((double)authoritativeTtsuTotal.Value - vol1Candidate.CharacterCount) /
+                                           Math.Max((double)authoritativeTtsuTotal.Value, vol1Candidate.CharacterCount);
+                                if (diff > 0.30)
+                                {
+                                    charCountSafe = false;
+                                }
+                            }
+                        }
+
+                        if (charCountSafe)
+                        {
+                            filtered.Add(vol1Candidate);
+                            incompatibleCount += qualifierCompatible.Count - 1;
+
+                            var effectivePlan = (parsedTitle.SearchPlan ?? new TitleSearchPlan
+                            {
+                                OriginalTitle = parsedTitle.OriginalTitle,
+                                ComparisonTitle = parsedTitle.ComparisonTitle,
+                                CanonicalBaseTitle = parsedTitle.BaseTitle
+                            }) with
+                            {
+                                Volume = StructuredVolume.Standard(1),
+                                VolumeInference = VolumeInferenceKind.ImplicitFirstVolume
+                            };
+
+                            effectiveParsed = new ParsedMediaTitle
+                            {
+                                OriginalTitle = parsedTitle.OriginalTitle,
+                                ComparisonTitle = parsedTitle.ComparisonTitle,
+                                BaseTitle = parsedTitle.BaseTitle,
+                                Volume = null,
+                                ParsingNotes = [.. parsedTitle.ParsingNotes, "Provider-confirmed implicit Volume 1"],
+                                SearchPlan = effectivePlan
+                            };
+
+                            return (filtered, incompatibleCount, null, effectiveParsed);
+                        }
+                    }
+                }
+            }
+        }
+
+        var subdeckCount = 0;
+        foreach (var candidate in qualifierCompatible)
+        {
+            if (candidate.IsStandalone)
+            {
+                filtered.Add(candidate);
+            }
+            else if (candidate.IsSubdeck)
+            {
+                subdeckCount++;
+                incompatibleCount++;
+            }
+        }
+
+        if (subdeckCount > 0 && filtered.Count == 0)
+        {
+            warning = "No volume number could be identified; child volumes were not suggested automatically.";
+        }
+
+        return (filtered, incompatibleCount, warning, effectiveParsed);
+    }
+
+    private static bool IsParentExactMatch(JitenMatchCandidate candidate, string normalizedTarget)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedTarget))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.ParentOriginalTitle) &&
+            string.Equals(NormalizeForComparison(candidate.ParentOriginalTitle), normalizedTarget, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.ParentEnglishTitle) &&
+            string.Equals(NormalizeForComparison(candidate.ParentEnglishTitle), normalizedTarget, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(candidate.ParentRomajiTitle) &&
+            string.Equals(NormalizeForComparison(candidate.ParentRomajiTitle), normalizedTarget, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeForComparison(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return string.Empty;
+        }
+
+        return title.Normalize(NormalizationForm.FormKC).Trim();
     }
 
     private sealed record SearchResult(

@@ -7,6 +7,7 @@ public interface IJitenCandidateScorer
     JitenMatchResult Score(
         ParsedMediaTitle parsedTitle,
         IEnumerable<JitenMatchCandidate> candidates,
-        int? authoritativeTtsuTotal = null);
+        int? authoritativeTtsuTotal = null,
+        int filteredIncompatibleCount = 0);
 }
 

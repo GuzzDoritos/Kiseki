@@ -14,7 +14,9 @@ public sealed record MediaWorkListItemViewModel(
     bool IsCompleted,
     int SessionCount,
     int? CurrentCharacterPosition = null,
-    double? PositionProgressPercentage = null)
+    double? PositionProgressPercentage = null,
+    MediaCoverSource CoverSource = MediaCoverSource.None,
+    string? CoverProviderItemId = null)
 {
     public int ProgressCurrent => CurrentCharacterPosition ?? CharactersRead;
 

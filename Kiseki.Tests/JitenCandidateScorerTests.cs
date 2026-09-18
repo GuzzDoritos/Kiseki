@@ -429,5 +429,263 @@ public sealed class JitenCandidateScorerTests
         Assert.Equal(MatchConfidence.None, result.Confidence);
         Assert.Contains("Conflicting volume markers across candidate title variants", result.BestCandidate.DisqualificationReason);
     }
-}
 
+    [Fact]
+    public void Score_Subdeck_ParentOriginalTitleMatchesBaseTitle_ChildProvidesVolume()
+    {
+        var parsed = _parser.Parse("Re:ゼロから始める異世界生活 1");
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 101,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Volume 1",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate], 100_000);
+
+        Assert.NotNull(result.BestCandidate);
+        Assert.False(result.BestCandidate.IsDisqualified);
+        Assert.Equal(40, result.BestCandidate.TitleScore);
+        Assert.Equal(35, result.BestCandidate.VolumeScore);
+        Assert.Equal(95, result.BestCandidate.TotalScore);
+        Assert.Equal(MatchConfidence.High, result.Confidence);
+        Assert.Contains("Volume 1 matched", result.BestCandidate.Evidence);
+    }
+
+    [Fact]
+    public void Score_Subdeck_ParentEnglishOrRomajiVariantMatchesBaseTitle()
+    {
+        var parsedEn = _parser.Parse("Re:Zero Starting Life in Another World 1");
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 101,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            ParentEnglishTitle = "Re:Zero Starting Life in Another World",
+            OriginalTitle = "第1巻",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsedEn, [candidate], 100_000);
+
+        Assert.NotNull(result.BestCandidate);
+        Assert.False(result.BestCandidate.IsDisqualified);
+        Assert.Equal(40, result.BestCandidate.TitleScore);
+        Assert.Equal(35, result.BestCandidate.VolumeScore);
+        Assert.Equal(MatchedTitleVariant.English, result.BestCandidate.MatchedTitle);
+    }
+
+    [Fact]
+    public void Score_Subdeck_WrongChildVolumeDisqualifies_DespiteExactParentTitle()
+    {
+        var parsed = _parser.Parse("Re:ゼロから始める異世界生活 1");
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 102,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Volume 2",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate], 100_000);
+
+        Assert.NotNull(result.BestCandidate);
+        Assert.True(result.BestCandidate.IsDisqualified);
+        Assert.Equal(0, result.BestCandidate.TotalScore);
+        Assert.Contains("Explicit volume conflict", result.BestCandidate.DisqualificationReason);
+    }
+
+    [Fact]
+    public void Score_Subdeck_MissingChildVolume_CannotReceiveVolumePointsFromParent()
+    {
+        var parsed = _parser.Parse("Re:ゼロから始める異世界生活 1");
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 105,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活 1",
+            OriginalTitle = "Short Stories Ex",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate], 100_000);
+
+        Assert.NotNull(result.BestCandidate);
+        // Child has no volume 1 (or is special), so it cannot receive 35 volume score
+        Assert.NotEqual(35, result.BestCandidate.VolumeScore);
+    }
+
+    [Fact]
+    public void Score_Subdeck_DuplicateExactCandidates_PreserveRunnerUpReviewRule()
+    {
+        var parsed = _parser.Parse("Re:ゼロから始める異世界生活 1");
+        var candidate1 = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 101,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Volume 1",
+            CharacterCount = 100_000
+        };
+        var candidate2 = new JitenMatchCandidate
+        {
+            DeckId = 200,
+            SubdeckId = 201,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Volume 1",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate1, candidate2], 100_000);
+
+        // Tied candidates (margin 0 < 10) must result in Review, not High
+        Assert.Equal(MatchConfidence.Review, result.Confidence);
+    }
+
+    [Fact]
+    public void Score_MainlineSource_DisqualifiesExShortStoriesAndArtBookBranches()
+    {
+        var parsed = _parser.Parse("Re:ゼロから始める異世界生活 1");
+
+        var mainline = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 101,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "第1巻",
+            CharacterCount = 100_000
+        };
+
+        var shortStories = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 102,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "短編集 1",
+            CharacterCount = 100_000
+        };
+
+        var ex = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 103,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Ex 1",
+            CharacterCount = 100_000
+        };
+
+        var artBook = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 104,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Art Works",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [mainline, shortStories, ex, artBook], 100_000);
+
+        var scoredMainline = result.Candidates.Single(c => c.Candidate.SubdeckId == 101);
+        Assert.False(scoredMainline.IsDisqualified);
+        Assert.Equal(95, scoredMainline.TotalScore);
+
+        var scoredShort = result.Candidates.Single(c => c.Candidate.SubdeckId == 102);
+        Assert.True(scoredShort.IsDisqualified);
+        Assert.Contains("Qualifier conflict", scoredShort.DisqualificationReason);
+
+        var scoredEx = result.Candidates.Single(c => c.Candidate.SubdeckId == 103);
+        Assert.True(scoredEx.IsDisqualified);
+        Assert.Contains("Qualifier conflict", scoredEx.DisqualificationReason);
+
+        var scoredArt = result.Candidates.Single(c => c.Candidate.SubdeckId == 104);
+        Assert.True(scoredArt.IsDisqualified);
+        Assert.Contains("Qualifier conflict", scoredArt.DisqualificationReason);
+    }
+
+    [Fact]
+    public void Score_ExSource_DisqualifiesMainlineAndShortStoriesBranches()
+    {
+        var parsed = _parser.Parse("Re:ゼロから始める異世界生活 Ex2 剣鬼恋歌");
+
+        var exCandidate = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 202,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "Ex2 剣鬼恋歌",
+            CharacterCount = 100_000
+        };
+
+        var mainlineCandidate = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 102,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "第2巻",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [exCandidate, mainlineCandidate], 100_000);
+
+        var scoredEx = result.Candidates.Single(c => c.Candidate.SubdeckId == 202);
+        Assert.False(scoredEx.IsDisqualified);
+        Assert.Contains("Series qualifier 'Ex' matched", scoredEx.Evidence);
+
+        var scoredMainline = result.Candidates.Single(c => c.Candidate.SubdeckId == 102);
+        Assert.True(scoredMainline.IsDisqualified);
+        Assert.Contains("Qualifier conflict", scoredMainline.DisqualificationReason);
+    }
+
+    [Fact]
+    public void Score_AttachedAsciiVolumeHypothesis_Scores35WhenConfirmedByChildVolume()
+    {
+        var parsed = _parser.Parse("Ｒｅ：ゼロから始める異世界生活5");
+
+        var candidate5 = new JitenMatchCandidate
+        {
+            DeckId = 100,
+            SubdeckId = 105,
+            ParentOriginalTitle = "Re:ゼロから始める異世界生活",
+            OriginalTitle = "第5巻",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate5], 100_000);
+
+        var scored = Assert.Single(result.Candidates);
+        Assert.False(scored.IsDisqualified);
+        Assert.Equal(35, scored.VolumeScore);
+        Assert.Contains(scored.Evidence, e => e.Contains("attached ASCII volume 5", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Score_ImplicitFirstVolume_Scores35WhenChildVolumeIsStandardVolume1()
+    {
+        var parsed = _parser.Parse("お隣の天使様にいつの間にか駄目人間にされていた件");
+        var planWithImplicitVol1 = parsed.SearchPlan! with
+        {
+            VolumeInference = VolumeInferenceKind.ImplicitFirstVolume,
+            Volume = StructuredVolume.Standard(1, "1")
+        };
+        var parsedWithPlan = parsed with { SearchPlan = planWithImplicitVol1 };
+
+        var candidate1 = new JitenMatchCandidate
+        {
+            DeckId = 200,
+            SubdeckId = 201,
+            ParentOriginalTitle = "お隣の天使様にいつの間にか駄目人間にされていた件",
+            OriginalTitle = "第1巻",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsedWithPlan, [candidate1], 100_000);
+
+        var scored = Assert.Single(result.Candidates);
+        Assert.False(scored.IsDisqualified);
+        Assert.Equal(35, scored.VolumeScore);
+        Assert.Contains(scored.Evidence, e => e.Contains("ImplicitFirstVolume", StringComparison.OrdinalIgnoreCase));
+    }
+}

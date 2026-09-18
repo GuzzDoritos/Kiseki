@@ -47,7 +47,8 @@ public sealed class LibraryJitenPageTests
         Assert.Equal(10, linkedWork.JitenDeckId);
         Assert.Equal(11, linkedWork.JitenSubdeckId);
         Assert.Equal(123_456, linkedWork.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/volume-1.jpg", linkedWork.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/volume-1.jpg", linkedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, linkedWork.CoverSource);
     }
 
     [Fact]
@@ -153,7 +154,92 @@ public sealed class LibraryJitenPageTests
         Assert.Null(linkedWork.JitenSubdeckId);
         Assert.Equal("Standalone Work", linkedWork.Title);
         Assert.Equal(88_000, linkedWork.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", linkedWork.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", linkedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, linkedWork.CoverSource);
+    }
+
+    [Fact]
+    public async Task Link_PreservesExistingUserOverrideCover()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Standalone Work");
+        work.UpdateCoverUrl("https://example.com/custom-user-cover.jpg");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var client = new StubJitenApiClient
+        {
+            Detail = new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO
+                {
+                    DeckId = 42,
+                    OriginalTitle = "Standalone Work",
+                    CoverName = "https://cdn.jiten.moe/standalone.jpg",
+                    CharacterCount = 88_000
+                }
+            }
+        };
+
+        var model = CreateLinkModel(database.Context, client);
+        model.Input = new LinkJitenModel.LinkJitenInput
+        {
+            ParentDeckId = 42,
+            SubdeckId = null,
+            TitleChoice = JitenTitleChoice.KeepCurrent
+        };
+
+        var result = await model.OnPostLinkAsync(work.Id, CancellationToken.None);
+
+        Assert.IsType<RedirectToPageResult>(result);
+        database.Context.ChangeTracker.Clear();
+        var linkedWork = await database.Context.MediaWorks.SingleAsync();
+        Assert.True(linkedWork.HasJitenLink);
+        Assert.Equal(42, linkedWork.JitenDeckId);
+        Assert.Equal("https://example.com/custom-user-cover.jpg", linkedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.UserOverride, linkedWork.CoverSource);
+    }
+
+    [Fact]
+    public async Task Link_PreservesExistingLegacyUnknownCover()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Standalone Work");
+        TestCoverState.SetLegacyUnknown(work, "https://example.com/legacy-cover.jpg");
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var client = new StubJitenApiClient
+        {
+            Detail = new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO
+                {
+                    DeckId = 42,
+                    OriginalTitle = "Standalone Work",
+                    CoverName = "https://cdn.jiten.moe/standalone.jpg",
+                    CharacterCount = 88_000
+                }
+            }
+        };
+
+        var model = CreateLinkModel(database.Context, client);
+        model.Input = new LinkJitenModel.LinkJitenInput
+        {
+            ParentDeckId = 42,
+            SubdeckId = null,
+            TitleChoice = JitenTitleChoice.KeepCurrent
+        };
+
+        var result = await model.OnPostLinkAsync(work.Id, CancellationToken.None);
+
+        Assert.IsType<RedirectToPageResult>(result);
+        database.Context.ChangeTracker.Clear();
+        var linkedWork = await database.Context.MediaWorks.SingleAsync();
+        Assert.True(linkedWork.HasJitenLink);
+        Assert.Equal(42, linkedWork.JitenDeckId);
+        Assert.Equal("https://example.com/legacy-cover.jpg", linkedWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.LegacyUnknown, linkedWork.CoverSource);
     }
 
     [Fact]

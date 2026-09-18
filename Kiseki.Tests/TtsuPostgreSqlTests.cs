@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Kiseki.Core;
+using Kiseki.Core.Entities;
 using Kiseki.Core.Models;
 using Kiseki.Core.Services;
 using Microsoft.EntityFrameworkCore;
@@ -29,8 +30,10 @@ public sealed class TtsuPostgreSqlTests
         await using var context = db.Context();
         await context.GetService<IMigrator>().MigrateAsync("20260911173535_AddTtsuImportState");
         var workId = Guid.NewGuid();
+        var work2Id = Guid.NewGuid();
         var receiptId = Guid.NewGuid();
-        await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"IsCompleted\") VALUES ({workId}, {"Book"}, {1}, {false})");
+        await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"IsCompleted\", \"JitenCoverUrl\") VALUES ({workId}, {"Book"}, {1}, {false}, {"https://example.com/legacy-cover.jpg"})");
+        await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"IsCompleted\", \"JitenCoverUrl\") VALUES ({work2Id}, {"Book 2"}, {1}, {false}, {null})");
         await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"TtsuImportReceipts\" (\"Id\", \"Books\", \"AddedDays\", \"UpdatedDays\", \"UnchangedDays\", \"StaleDays\") VALUES ({receiptId}, {1}, {1}, {0}, {0}, {0})");
         var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
         for (var i = 0; i < ids.Length; i++)
@@ -40,6 +43,12 @@ public sealed class TtsuPostgreSqlTests
         }
         await context.Database.MigrateAsync();
         Assert.False(context.Database.HasPendingModelChanges());
+        var upgradedWork1 = await context.MediaWorks.AsNoTracking().SingleAsync(x => x.Id == workId);
+        Assert.Equal("https://example.com/legacy-cover.jpg", upgradedWork1.CoverUrl);
+        Assert.Equal(MediaCoverSource.LegacyUnknown, upgradedWork1.CoverSource);
+        var upgradedWork2 = await context.MediaWorks.AsNoTracking().SingleAsync(x => x.Id == work2Id);
+        Assert.Null(upgradedWork2.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, upgradedWork2.CoverSource);
         var logs = await context.ImmersionLogs.AsNoTracking().ToListAsync();
         Assert.Equal(ids.Order(), logs.Select(x => x.Id).Order());
         Assert.All(logs, x => Assert.Null(x.SourceRevision));

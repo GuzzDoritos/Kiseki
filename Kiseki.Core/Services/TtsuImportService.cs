@@ -116,11 +116,49 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                             {
                                 selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
                                 receipt.MetadataLinks++;
+
+                                if (request.Metadata.EffectiveCover is { } coverSelection)
+                                {
+                                    try
+                                    {
+                                        if (coverSelection.Provider == Models.Covers.ExternalCoverProvider.OpenLibrary)
+                                        {
+                                            work.ApplyOpenLibraryCover(coverSelection.CoverUrl, coverSelection.ProviderItemId);
+                                        }
+                                        else
+                                        {
+                                            work.ApplyGoogleBooksCover(coverSelection.CoverUrl, coverSelection.ProviderItemId);
+                                        }
+                                    }
+                                    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                                    {
+                                        // A cover failure must never fail the transaction
+                                    }
+                                }
                             }
-                            else if (!work.HasJitenLink && work.JitenCoverUrl == null)
+                            else if (!work.HasJitenLink && !work.HasCover)
                             {
                                 selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
                                 receipt.MetadataLinks++;
+
+                                if (request.Metadata.EffectiveCover is { } coverSelection)
+                                {
+                                    try
+                                    {
+                                        if (coverSelection.Provider == Models.Covers.ExternalCoverProvider.OpenLibrary)
+                                        {
+                                            work.ApplyOpenLibraryCover(coverSelection.CoverUrl, coverSelection.ProviderItemId);
+                                        }
+                                        else
+                                        {
+                                            work.ApplyGoogleBooksCover(coverSelection.CoverUrl, coverSelection.ProviderItemId);
+                                        }
+                                    }
+                                    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+                                    {
+                                        // A cover failure must never fail the transaction
+                                    }
+                                }
                             }
                             else
                             {

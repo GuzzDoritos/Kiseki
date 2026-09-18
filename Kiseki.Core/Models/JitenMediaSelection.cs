@@ -27,7 +27,10 @@ public sealed record JitenMediaSelection(
     int CharacterCount,
     string? CoverUrl,
     int ChildrenDeckCount,
-    JitenCoverEvidence CoverEvidence = JitenCoverEvidence.None)
+    JitenCoverEvidence CoverEvidence = JitenCoverEvidence.None,
+    string? ParentOriginalTitle = null,
+    string? ParentRomajiTitle = null,
+    string? ParentEnglishTitle = null)
 {
     public bool IsSubdeck => SubdeckId.HasValue;
 
@@ -58,7 +61,10 @@ public sealed record JitenMediaSelection(
             parentDeck.DeckId,
             subdeck.DeckId,
             subdeck,
-            parentDeck.CoverName);
+            parentDeck.CoverName,
+            parentDeck.OriginalTitle?.Trim(),
+            parentDeck.RomajiTitle?.Trim(),
+            parentDeck.EnglishTitle?.Trim());
     }
 
     public bool HasTitle(JitenTitleChoice choice)
@@ -81,17 +87,27 @@ public sealed record JitenMediaSelection(
 
         var replacementTitle = ResolveTitle(titleChoice);
 
+        var coverSource = CoverEvidence switch
+        {
+            JitenCoverEvidence.None => MediaCoverSource.None,
+            JitenCoverEvidence.Specific => MediaCoverSource.JitenSpecific,
+            JitenCoverEvidence.ParentFallback => MediaCoverSource.JitenParentFallback,
+            _ => throw new InvalidOperationException(
+                $"Unsupported Jiten cover evidence '{CoverEvidence}'.")
+        };
+
         if (SubdeckId is int subdeckId)
         {
             mediaWork.LinkToJitenSubdeck(
                 DeckId,
                 subdeckId,
                 CharacterCount,
-                CoverUrl);
+                CoverUrl,
+                coverSource);
         }
         else
         {
-            mediaWork.LinkToJitenDeck(DeckId, CharacterCount, CoverUrl);
+            mediaWork.LinkToJitenDeck(DeckId, CharacterCount, CoverUrl, coverSource);
         }
 
         if (replacementTitle is not null)
@@ -104,7 +120,10 @@ public sealed record JitenMediaSelection(
         int deckId,
         int? subdeckId,
         JitenDeckDTO selectedDeck,
-        string? fallbackCoverUrl)
+        string? fallbackCoverUrl,
+        string? parentOriginalTitle = null,
+        string? parentRomajiTitle = null,
+        string? parentEnglishTitle = null)
     {
         var specificCoverUrl = NormalizeCoverUrl(selectedDeck.CoverName);
         var fallbackCover = specificCoverUrl is null ? NormalizeCoverUrl(fallbackCoverUrl) : null;
@@ -124,7 +143,10 @@ public sealed record JitenMediaSelection(
             selectedDeck.CharacterCount,
             coverUrl,
             selectedDeck.ChildrenDeckCount,
-            coverEvidence);
+            coverEvidence,
+            parentOriginalTitle,
+            parentRomajiTitle,
+            parentEnglishTitle);
     }
 
     private string? ResolveTitle(JitenTitleChoice choice)

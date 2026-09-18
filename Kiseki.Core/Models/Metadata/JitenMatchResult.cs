@@ -39,5 +39,6 @@ public sealed record JitenMatchResult
     public int RunnerUpMargin { get; init; }
     public IReadOnlyList<ScoredCandidate> Candidates { get; init; } = [];
     public IReadOnlyList<string> Evidence { get; init; } = [];
+    public int FilteredIncompatibleCount { get; init; } = 0;
 }
 

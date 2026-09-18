@@ -117,15 +117,24 @@ namespace Kiseki.Core.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CoverProviderItemId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("CoverSource")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("CoverUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
                     b.Property<bool>("IsCompleted")
                         .HasColumnType("boolean");
 
                     b.Property<int?>("JitenCharacterCount")
                         .HasColumnType("integer");
-
-                    b.Property<string>("JitenCoverUrl")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
 
                     b.Property<int?>("JitenDeckId")
                         .HasColumnType("integer");
@@ -161,6 +170,10 @@ namespace Kiseki.Core.Migrations
 
                     b.ToTable("MediaWorks", t =>
                         {
+                            t.HasCheckConstraint("CK_MediaWorks_CoverProviderItemId", "(\"CoverSource\" IN (5, 6) AND \"CoverProviderItemId\" IS NOT NULL) OR (\"CoverSource\" NOT IN (5, 6) AND \"CoverProviderItemId\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_MediaWorks_CoverUrlAndSource", "(\"CoverUrl\" IS NULL AND \"CoverSource\" = 0) OR (\"CoverUrl\" IS NOT NULL AND \"CoverSource\" <> 0)");
+
                             t.HasCheckConstraint("CK_MediaWorks_JitenSubdeckRequiresDeck", "\"JitenSubdeckId\" IS NULL OR \"JitenDeckId\" IS NOT NULL");
 
                             t.HasCheckConstraint("CK_MediaWorks_TtsuCharacterCount", "\"TtsuCharacterCount\" IS NULL OR \"TtsuCharacterCount\" > 0");

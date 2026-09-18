@@ -45,6 +45,23 @@ public static class SqliteSchemaUpgrade
         var workColumns = await GetColumnsAsync(context, transaction, "MediaWorks", cancellationToken);
         if (!workColumns.Contains("TtsuCharacterCount"))
             await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"MediaWorks\" ADD COLUMN \"TtsuCharacterCount\" INTEGER NULL CHECK (\"TtsuCharacterCount\" > 0);", cancellationToken);
+        if (workColumns.Contains("JitenCoverUrl") && !workColumns.Contains("CoverUrl"))
+        {
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"MediaWorks\" RENAME COLUMN \"JitenCoverUrl\" TO \"CoverUrl\";", cancellationToken);
+            workColumns.Add("CoverUrl");
+        }
+        if (!workColumns.Contains("CoverSource"))
+        {
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"MediaWorks\" ADD COLUMN \"CoverSource\" INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+            await context.Database.ExecuteSqlRawAsync("UPDATE \"MediaWorks\" SET \"CoverSource\" = 1 WHERE \"CoverUrl\" IS NOT NULL;", cancellationToken);
+            await context.Database.ExecuteSqlRawAsync("UPDATE \"MediaWorks\" SET \"CoverSource\" = 0 WHERE \"CoverUrl\" IS NULL;", cancellationToken);
+            workColumns.Add("CoverSource");
+        }
+        if (!workColumns.Contains("CoverProviderItemId"))
+        {
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"MediaWorks\" ADD COLUMN \"CoverProviderItemId\" TEXT NULL;", cancellationToken);
+            workColumns.Add("CoverProviderItemId");
+        }
 
         var bindingColumns = await GetColumnsAsync(context, transaction, "TtsuBindings", cancellationToken);
         if (!bindingColumns.Contains("CurrentCharacterPosition"))

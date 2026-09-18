@@ -107,6 +107,66 @@ public class JitenApiClientTests
         Assert.Null(ex.RetryAfter);
     }
 
+    [Fact]
+    public async Task SearchBooksBoundedAsync_CapsPaginationAtMaxResults()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var offset = request.RequestUri?.Query.Contains("offset=2") == true ? 2 : 0;
+            var json = $$"""
+                {
+                  "data": [
+                    { "deckId": {{offset + 1}}, "originalTitle": "Book {{offset + 1}}", "characterCount": 100 },
+                    { "deckId": {{offset + 2}}, "originalTitle": "Book {{offset + 2}}", "characterCount": 200 }
+                  ],
+                  "totalItems": 10,
+                  "pageSize": 2,
+                  "currentOffset": {{offset}}
+                }
+                """;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new JitenApiClient(new HttpClient(handler));
+        var results = await client.SearchBooksBoundedAsync("test", maxResults: 3);
+
+        Assert.Equal(3, results.Count);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task SearchBooksAsync_PerformsFullPagination()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var offset = request.RequestUri?.Query.Contains("offset=2") == true ? 2 : 0;
+            var json = $$"""
+                {
+                  "data": [
+                    { "deckId": {{offset + 1}}, "originalTitle": "Book {{offset + 1}}", "characterCount": 100 },
+                    { "deckId": {{offset + 2}}, "originalTitle": "Book {{offset + 2}}", "characterCount": 200 }
+                  ],
+                  "totalItems": 4,
+                  "pageSize": 2,
+                  "currentOffset": {{offset}}
+                }
+                """;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = new JitenApiClient(new HttpClient(handler));
+        var results = await client.SearchBooksAsync("test");
+
+        Assert.Equal(4, results.Count);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
     private sealed class StubHttpMessageHandler(
         Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler

@@ -323,7 +323,8 @@ public sealed class JitenMatchServiceTests
         var outcome = Assert.Single(outcomes);
         Assert.Equal(JitenMatchStatus.Matched, outcome.Status);
         Assert.Equal(1, client.DetailCallCount);
-        Assert.Equal(2, outcome.Result?.Candidates.Count);
+        Assert.Equal(1, outcome.Result?.Candidates.Count);
+        Assert.Equal(1, outcome.Result?.FilteredIncompatibleCount);
     }
 
     [Fact]
@@ -451,13 +452,13 @@ public sealed class JitenMatchServiceTests
                     new JitenDeckDTO
                     {
                         DeckId = 12,
-                        OriginalTitle = "Vol 2",
+                        OriginalTitle = "Volume 1",
                         CoverName = "" // Falls back to parent cover
                     },
                     new JitenDeckDTO
                     {
                         DeckId = 13,
-                        OriginalTitle = "Vol 3",
+                        OriginalTitle = "第1巻",
                         CoverName = "nocover.jpg" // Rejected cover name
                     }
                 ]
@@ -923,6 +924,423 @@ public sealed class JitenMatchServiceTests
         Assert.True(stopwatch.ElapsedMilliseconds < 5000, $"Test took too long: {stopwatch.ElapsedMilliseconds} ms");
     }
 
+    [Fact]
+    public async Task MatchBatchAsync_UsesBoundedSearchWithConfiguredOptions()
+    {
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>([])
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var options = new JitenMatchOptions
+        {
+            MaxSearchResults = 15,
+            MaxDetailBranches = 3
+        };
+        var service = new JitenMatchService(client, resolver, options: options);
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Test Book" };
+        await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        Assert.Single(client.BoundedSearchCalls);
+        Assert.Equal("Test Book", client.BoundedSearchCalls[0].Query);
+        Assert.Equal(15, client.BoundedSearchCalls[0].MaxResults);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_CapsDetailBranchesAtMaxDetailBranches()
+    {
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+                Enumerable.Range(1, 10).Select(i => new JitenDeckDTO
+                {
+                    DeckId = i,
+                    OriginalTitle = $"Series {i}",
+                    ChildrenDeckCount = 2
+                }).ToList()),
+            DetailHandler = id => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = id, OriginalTitle = $"Series {id}", ChildrenDeckCount = 2 },
+                SubDecks = [new JitenDeckDTO { DeckId = id * 100 + 1, OriginalTitle = "Volume 1", CharacterCount = 10_000 }]
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var options = new JitenMatchOptions
+        {
+            MaxSearchResults = 20,
+            MaxDetailBranches = 3
+        };
+        var service = new JitenMatchService(client, resolver, options: options);
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Series 1" };
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcomes[0].Status);
+        // DetailCallCount must not exceed MaxDetailBranches (3)
+        Assert.InRange(client.DetailCallCount, 1, 3);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_PrioritizesPlausiblyRelatedTitlesBeforeDetailFetches()
+    {
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO { DeckId = 10, OriginalTitle = "Completely Unrelated Alpha", ChildrenDeckCount = 1 },
+                new JitenDeckDTO { DeckId = 11, OriginalTitle = "Completely Unrelated Beta", ChildrenDeckCount = 1 },
+                new JitenDeckDTO { DeckId = 12, OriginalTitle = "Target Series", ChildrenDeckCount = 1 },
+                new JitenDeckDTO { DeckId = 13, OriginalTitle = "Completely Unrelated Gamma", ChildrenDeckCount = 1 }
+            ]),
+            DetailHandler = id => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = id, OriginalTitle = id == 12 ? "Target Series" : $"Other {id}", ChildrenDeckCount = 1 },
+                SubDecks = [new JitenDeckDTO { DeckId = id * 10, OriginalTitle = "Volume 1", CharacterCount = 50_000 }]
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var options = new JitenMatchOptions
+        {
+            MaxSearchResults = 20,
+            MaxDetailBranches = 1
+        };
+        var service = new JitenMatchService(client, resolver, options: options);
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Target Series 1" };
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcomes[0].Status);
+        // Only the plausibly related parent (deck 12) was inspected!
+        Assert.Equal([12], client.DetailDeckIds);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_LaterSubdeckVolumeFoundSuccessfully()
+    {
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO { DeckId = 500, OriginalTitle = "Long Series", ChildrenDeckCount = 50 }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 500, OriginalTitle = "Long Series", ChildrenDeckCount = 50 },
+                SubDecks =
+                [
+                    new JitenDeckDTO { DeckId = 501, OriginalTitle = "Volume 1", CharacterCount = 50_000 },
+                    new JitenDeckDTO { DeckId = 550, OriginalTitle = "Volume 50", CharacterCount = 65_000 }
+                ]
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Long Series 50" };
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcomes[0].Status);
+        Assert.Equal(550, outcomes[0].Result?.Candidates[0].Candidate.SubdeckId);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_Volume1RequestAgainst50Subdecks_ScoresOnlyApplicableVolume1Candidates()
+    {
+        var subdecks = Enumerable.Range(1, 50).Select(i => new JitenDeckDTO
+        {
+            DeckId = 1000 + i,
+            OriginalTitle = $"Volume {i}",
+            CharacterCount = 50_000 + i * 100
+        }).ToList();
+
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO { DeckId = 1000, OriginalTitle = "Long Series", ChildrenDeckCount = 50 }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 1000, OriginalTitle = "Long Series", ChildrenDeckCount = 50 },
+                SubDecks = subdecks
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Long Series 1" };
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcome.Status);
+        Assert.Single(outcome.Result!.Candidates);
+        Assert.Equal(1001, outcome.Result.Candidates[0].Candidate.SubdeckId);
+        Assert.Equal(49, outcome.Result.FilteredIncompatibleCount);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_GroupedVolume1AndVolume2Request_SharesParentDetail_ProducesSeparateCandidateSets()
+    {
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO { DeckId = 2000, OriginalTitle = "Twin Series", ChildrenDeckCount = 2 }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 2000, OriginalTitle = "Twin Series", ChildrenDeckCount = 2 },
+                SubDecks =
+                [
+                    new JitenDeckDTO { DeckId = 2001, OriginalTitle = "Volume 1", CharacterCount = 50_000 },
+                    new JitenDeckDTO { DeckId = 2002, OriginalTitle = "Volume 2", CharacterCount = 55_000 }
+                ]
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var req1 = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Twin Series 1" };
+        var req2 = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Twin Series 2" };
+
+        var outcomes = await service.MatchBatchAsync([req1, req2], TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, outcomes.Count);
+        Assert.Equal(1, client.DetailCallCount);
+
+        var outcome1 = outcomes.Single(o => o.CorrelationId == req1.CorrelationId);
+        Assert.Equal(JitenMatchStatus.Matched, outcome1.Status);
+        Assert.Single(outcome1.Result!.Candidates);
+        Assert.Equal(2001, outcome1.Result.Candidates[0].Candidate.SubdeckId);
+        Assert.Equal(1, outcome1.Result.FilteredIncompatibleCount);
+
+        var outcome2 = outcomes.Single(o => o.CorrelationId == req2.CorrelationId);
+        Assert.Equal(JitenMatchStatus.Matched, outcome2.Status);
+        Assert.Single(outcome2.Result!.Candidates);
+        Assert.Equal(2002, outcome2.Result.Candidates[0].Candidate.SubdeckId);
+        Assert.Equal(1, outcome2.Result.FilteredIncompatibleCount);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_NoVolumeInTitle_DoesNotExpandMultiVolumeParentIntoAllChildren()
+    {
+        var subdecks = Enumerable.Range(2, 50).Select(i => new JitenDeckDTO
+        {
+            DeckId = 3000 + i,
+            OriginalTitle = $"Volume {i}",
+            CharacterCount = 50_000 + i * 100
+        }).ToList();
+
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO { DeckId = 3000, OriginalTitle = "MultiVol Series", ChildrenDeckCount = 50 }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 3000, OriginalTitle = "MultiVol Series", ChildrenDeckCount = 50 },
+                SubDecks = subdecks
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "MultiVol Series" };
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.NoCandidates, outcome.Status);
+        Assert.Empty(outcome.Result!.Candidates);
+        Assert.Contains(outcome.Warnings, w => w.Contains("child volumes were not suggested automatically"));
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_MultipleSameVolumeEditions_PreservesAmbiguityForRunnerUp()
+    {
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = _ => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO { DeckId = 4000, OriginalTitle = "Dual Edition Series", ChildrenDeckCount = 2 }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 4000, OriginalTitle = "Dual Edition Series", ChildrenDeckCount = 2 },
+                SubDecks =
+                [
+                    new JitenDeckDTO { DeckId = 4001, OriginalTitle = "Volume 1", CharacterCount = 50_000 },
+                    new JitenDeckDTO { DeckId = 4002, OriginalTitle = "第1巻", CharacterCount = 50_000 }
+                ]
+            })
+        };
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest { CorrelationId = Guid.NewGuid(), RawTitle = "Dual Edition Series 1" };
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcome.Status);
+        Assert.Equal(2, outcome.Result!.Candidates.Count);
+        Assert.Equal(MatchConfidence.Review, outcome.Result.Confidence);
+        Assert.Equal(0, outcome.Result.RunnerUpMargin);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_AobutaRetailerSuffix_UsesSearchAliasToDiscoverStandaloneDeck()
+    {
+        const string rawTitle = "青春ブタ野郎はナイチンゲールの夢を見ない 『青春ブタ野郎』シリーズ (電撃文庫)";
+        const string cleanAlias = "青春ブタ野郎はナイチンゲールの夢を見ない";
+
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = query =>
+            {
+                if (query.Contains(cleanAlias, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+                    [
+                        new JitenDeckDTO
+                        {
+                            DeckId = 7000,
+                            OriginalTitle = cleanAlias,
+                            ChildrenDeckCount = 0,
+                            CharacterCount = 95_000
+                        }
+                    ]);
+                }
+
+                return Task.FromResult<IReadOnlyList<JitenDeckDTO>>([]);
+            },
+            DetailHandler = deckId => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO
+                {
+                    DeckId = deckId,
+                    OriginalTitle = cleanAlias,
+                    ChildrenDeckCount = 0,
+                    CharacterCount = 95_000
+                }
+            })
+        };
+
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest
+        {
+            CorrelationId = Guid.NewGuid(),
+            RawTitle = rawTitle,
+            AuthoritativeTtsuTotal = 95_000
+        };
+
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcome.Status);
+        Assert.Equal(cleanAlias, outcome.MatchedAlias);
+        Assert.Single(outcome.Result!.Candidates);
+        Assert.Equal(7000, outcome.Result.Candidates[0].Candidate.DeckId);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_AttachedAsciiNumber_MatchesWhenChildVolumeConfirmed()
+    {
+        const string rawTitle = "Ｒｅ：ゼロから始める異世界生活5";
+
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = query => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO
+                {
+                    DeckId = 8000,
+                    OriginalTitle = "Re:ゼロから始める異世界生活",
+                    ChildrenDeckCount = 5
+                }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 8000, OriginalTitle = "Re:ゼロから始める異世界生活", ChildrenDeckCount = 5 },
+                SubDecks =
+                [
+                    new JitenDeckDTO { DeckId = 8001, OriginalTitle = "第1巻", CharacterCount = 100_000 },
+                    new JitenDeckDTO { DeckId = 8005, OriginalTitle = "第5巻", CharacterCount = 105_000 }
+                ]
+            })
+        };
+
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest
+        {
+            CorrelationId = Guid.NewGuid(),
+            RawTitle = rawTitle,
+            AuthoritativeTtsuTotal = 105_000
+        };
+
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcome.Status);
+        var matchedCandidate = Assert.Single(outcome.Result!.Candidates);
+        Assert.Equal(8005, matchedCandidate.Candidate.SubdeckId);
+    }
+
+    [Fact]
+    public async Task MatchBatchAsync_ImplicitFirstVolume_MatchesMultiVolumeDeckWithSingleVolume1()
+    {
+        const string rawTitle = "お隣の天使様にいつの間にか駄目人間にされていた件";
+
+        var client = new MockJitenApiClient
+        {
+            SearchHandler = query => Task.FromResult<IReadOnlyList<JitenDeckDTO>>(
+            [
+                new JitenDeckDTO
+                {
+                    DeckId = 9000,
+                    OriginalTitle = "お隣の天使様にいつの間にか駄目人間にされていた件",
+                    ChildrenDeckCount = 4
+                }
+            ]),
+            DetailHandler = _ => Task.FromResult<JitenDeckDetailDTO?>(new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO { DeckId = 9000, OriginalTitle = "お隣の天使様にいつの間にか駄目人間にされていた件", ChildrenDeckCount = 4 },
+                SubDecks =
+                [
+                    new JitenDeckDTO { DeckId = 9001, OriginalTitle = "第1巻", CharacterCount = 80_000 },
+                    new JitenDeckDTO { DeckId = 9002, OriginalTitle = "第2巻", CharacterCount = 82_000 },
+                    new JitenDeckDTO { DeckId = 9003, OriginalTitle = "第3巻", CharacterCount = 81_000 },
+                    new JitenDeckDTO { DeckId = 9004, OriginalTitle = "第4巻", CharacterCount = 85_000 }
+                ]
+            })
+        };
+
+        var resolver = new JitenSelectionResolver(client);
+        var service = new JitenMatchService(client, resolver, options: FastOptions());
+
+        var request = new JitenMatchRequest
+        {
+            CorrelationId = Guid.NewGuid(),
+            RawTitle = rawTitle,
+            AuthoritativeTtsuTotal = 80_000
+        };
+
+        var outcomes = await service.MatchBatchAsync([request], TimeSpan.FromSeconds(5));
+
+        var outcome = Assert.Single(outcomes);
+        Assert.Equal(JitenMatchStatus.Matched, outcome.Status);
+        var matched = Assert.Single(outcome.Result!.Candidates);
+        Assert.Equal(9001, matched.Candidate.SubdeckId);
+        Assert.Contains(matched.Evidence, e => e.Contains("ImplicitFirstVolume"));
+    }
+
     private sealed class MockJitenApiClient : IJitenApiClient
     {
         private int _concurrency;
@@ -931,11 +1349,21 @@ public sealed class JitenMatchServiceTests
         public int DetailCallCount { get; private set; }
         public List<string> SearchQueries { get; } = [];
         public List<int> DetailDeckIds { get; } = [];
+        public List<(string Query, int MaxResults)> BoundedSearchCalls { get; } = [];
 
         public Func<string, Task<IReadOnlyList<JitenDeckDTO>>>? SearchHandler { get; set; }
         public Func<string, CancellationToken, Task<IReadOnlyList<JitenDeckDTO>>>? SearchHandlerWithToken { get; set; }
         public Func<int, Task<JitenDeckDetailDTO?>>? DetailHandler { get; set; }
         public Func<int, CancellationToken, Task<JitenDeckDetailDTO?>>? DetailHandlerWithToken { get; set; }
+
+        public Task<IReadOnlyList<JitenDeckDTO>> SearchBooksBoundedAsync(string query, int maxResults, CancellationToken cancellationToken = default)
+        {
+            lock (BoundedSearchCalls)
+            {
+                BoundedSearchCalls.Add((query, maxResults));
+            }
+            return SearchBooksAsync(query, cancellationToken);
+        }
 
         public async Task<IReadOnlyList<JitenDeckDTO>> SearchBooksAsync(string query, CancellationToken cancellationToken = default)
         {

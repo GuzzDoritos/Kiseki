@@ -469,6 +469,7 @@ table,
 }
 
 .media-card-link {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -559,6 +560,7 @@ table,
 }
 
 .media-row-link {
+  position: relative;
   display: grid;
   grid-template-columns: 40px minmax(220px, 1fr) 176px 92px;
   align-items: center;
@@ -579,6 +581,34 @@ table,
   outline: 1px solid var(--color-accent);
   outline-offset: -1px;
   background: var(--color-accent-glow);
+}
+
+.media-details-overlay {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+}
+
+.media-details-overlay:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+.google-books-item-link {
+  position: relative;
+  z-index: 2;
+}
+
+.google-books-list-attribution {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 20px 16px;
+}
+
+.google-books-list-attribution img {
+  display: block;
+  width: 62px;
+  height: 30px;
 }
 
 .media-cover {
@@ -2161,6 +2191,16 @@ body.cover-edit-open {
   font-weight: 600;
 }
 
+.badge-low-resolution {
+  display: inline-flex;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(234, 179, 8, .15);
+  color: #eab308;
+  font-size: 9px;
+  font-weight: 600;
+}
+
 .candidate-meta {
   display: flex;
   flex-wrap: wrap;
@@ -2179,6 +2219,164 @@ body.cover-edit-open {
   padding-left: 16px;
   color: var(--color-ink-3);
   font-size: 10px;
+}
+
+.candidate-evidence-details {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.candidate-evidence-details summary {
+  color: var(--color-ink-3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.candidate-evidence-details summary:hover {
+  color: var(--color-ink-2);
+}
+
+.candidate-google-status {
+  font-size: 11px;
+  color: var(--color-ink-3);
+  margin-top: 2px;
+  display: block;
+}
+
+.filtered-incompatible-summary,
+.omitted-plausible-summary {
+  color: var(--color-ink-3);
+  font-size: 11px;
+  margin: 4px 0 0;
+}
+
+.ttsu-google-unconfigured-note {
+  padding: 8px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 6px;
+  color: var(--color-ink-3);
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+/* TTSU Auto-match Metadata Progress Card */
+.ttsu-enrichment-progress-card {
+  margin-top: 16px;
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--color-edge);
+  border-radius: 8px;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ttsu-enrichment-progress-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ttsu-enrichment-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.ttsu-enrichment-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: ttsu-spinner-rotate 0.85s linear infinite;
+  flex-shrink: 0;
+}
+
+.ttsu-enrichment-spinner.is-paused {
+  animation-play-state: paused;
+  opacity: 0.5;
+}
+
+@keyframes ttsu-spinner-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ttsu-enrichment-spinner {
+    animation: none;
+    border-top-color: var(--color-accent);
+    opacity: 0.8;
+  }
+}
+
+.ttsu-progress-status {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.ttsu-progress-summary {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--color-ink-2);
+}
+
+.ttsu-progress-bar-container {
+  height: 6px;
+  background: var(--color-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ttsu-progress-bar-fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.25s ease-out;
+}
+
+.ttsu-progress-secondary {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-ink-3);
+}
+
+.ttsu-progress-error-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 74, 74, 0.08);
+  border: 1px solid rgba(255, 74, 74, 0.25);
+  border-radius: 6px;
+}
+
+.ttsu-progress-error-container p {
+  margin: 0;
+  font-size: 12px;
+  color: #ff9a9a;
+  flex: 1;
+}
+
+.candidate-low-confidence-warning {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--color-amber);
+}
+
+.candidate-disqualified-reason {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #ff6b6b;
+}
+
+.import-noscript-warning {
+  margin-top: 14px;
 }
 
 @media (min-width: 992px) {

@@ -1,8 +1,11 @@
 using Kiseki.Core;
 using Kiseki.Core.DTOs;
+using Kiseki.Core.Entities;
 using Kiseki.Core.Models;
+using Kiseki.Core.Models.GoogleBooks;
 using Kiseki.Core.Models.Metadata;
 using Kiseki.Core.Services;
+using Kiseki.Core.Services.GoogleBooks;
 using Kiseki.Core.Services.Metadata;
 using Kiseki.Web.Models;
 using Kiseki.Web.Pages.Import;
@@ -319,14 +322,31 @@ public sealed class TtsuImportPageTests
         var result = await model.OnPostPreviewAsync(CancellationToken.None);
 
         Assert.IsType<PageResult>(result);
+        Assert.Empty(matchService.Invocations);
+        Assert.True(model.IsEnrichmentActive);
+        Assert.Equal(2, model.EnrichmentTotalCount);
+        Assert.Equal(0, model.EnrichmentCompletedCount);
+
+        // First book enrichment
+        var enrich1 = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        Assert.IsType<JsonResult>(enrich1);
         Assert.Single(matchService.Invocations);
-        var requests = matchService.Invocations[0];
-        Assert.Equal(2, requests.Count);
+        Assert.Single(matchService.Invocations[0]);
+
+        // Second book enrichment
+        var enrich2 = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        Assert.IsType<JsonResult>(enrich2);
+        Assert.Equal(2, matchService.Invocations.Count);
+        Assert.Single(matchService.Invocations[1]);
 
         var firstBook = model.Books.Single(b => b.Title == "Test Book");
         var secondBook = model.Books.Single(b => b.Title == "Second Book");
-        Assert.Contains(requests, r => r.CorrelationId == firstBook.BookKey && r.RawTitle == "Test Book");
-        Assert.Contains(requests, r => r.CorrelationId == secondBook.BookKey && r.RawTitle == "Second Book");
+        var req1 = matchService.Invocations[0].Single();
+        var req2 = matchService.Invocations[1].Single();
+        Assert.Equal(firstBook.BookKey, req1.CorrelationId);
+        Assert.Equal("Test Book", req1.RawTitle);
+        Assert.Equal(secondBook.BookKey, req2.CorrelationId);
+        Assert.Equal("Second Book", req2.RawTitle);
     }
 
     [Fact]
@@ -438,6 +458,7 @@ public sealed class TtsuImportPageTests
         model.FolderFiles = [StatisticsFile(fixtureStream)];
 
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         Assert.True(model.HasPreview);
         Assert.NotNull(model.Books.Single().Enrichment);
@@ -465,6 +486,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         Assert.Single(matchService.Invocations);
         var originalCandidates = model.Books.Single().Enrichment!.Candidates;
@@ -517,6 +539,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(firstStream, "Test Book"), StatisticsFile(secondStream, "Second Book")];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var allKeys = model.Books.SelectMany(b => b.Enrichment!.Candidates.Select(c => c.Key)).ToList();
         Assert.Equal(4, allKeys.Count);
@@ -552,16 +575,16 @@ public sealed class TtsuImportPageTests
         model.FolderFiles = [StatisticsFile(fixtureStream)];
 
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var candidates = model.Books.Single().Enrichment!.Candidates;
-        var selectableCandidate = candidates.Single(candidate => candidate.DeckId == 101);
-        var disqualifiedCandidate = candidates.Single(candidate => candidate.DeckId == 102);
+        var selectableCandidate = Assert.Single(candidates);
+        Assert.Equal(101, selectableCandidate.DeckId);
         Assert.True(selectableCandidate.IsSelectable);
         Assert.Equal(["Exact title and volume matched"], selectableCandidate.Evidence);
-        Assert.False(disqualifiedCandidate.IsSelectable);
-        Assert.Equal(["Explicit volume conflict"], disqualifiedCandidate.Evidence);
+        Assert.DoesNotContain(candidates, candidate => candidate.DeckId == 102);
 
-        model.Selections[0].CandidateKey = disqualifiedCandidate.Key;
+        model.Selections[0].CandidateKey = Guid.NewGuid();
         var result = await model.OnPostReviewAsync(CancellationToken.None);
 
         Assert.IsType<PageResult>(result);
@@ -588,6 +611,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var preview = model.Books.Single();
         Assert.Equal(TtsuEnrichmentBadge.AutoMatched, preview.Enrichment!.Badge);
@@ -617,6 +641,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var preview = model.Books.Single();
         Assert.Equal(confidence == MatchConfidence.Review ? TtsuEnrichmentBadge.NeedsReview : TtsuEnrichmentBadge.NoSafeMatch, preview.Enrichment!.Badge);
@@ -650,6 +675,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var preview = model.Books.Single();
         Assert.Null(model.Selections[0].CandidateKey);
@@ -670,6 +696,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         Assert.True(model.Selections.Single().Selected);
         var preview = model.Books.Single();
@@ -692,7 +719,7 @@ public sealed class TtsuImportPageTests
 
         // Target 3 has cover
         var workWithCover = new Kiseki.Core.Entities.MediaWork("Book with cover");
-        typeof(Kiseki.Core.Entities.MediaWork).GetProperty("JitenCoverUrl")!.SetValue(workWithCover, "https://example.com/cover.jpg");
+        workWithCover.UpdateCoverUrl("https://example.com/cover.jpg");
         database.Context.MediaWorks.Add(workWithCover);
 
         await database.Context.SaveChangesAsync();
@@ -713,6 +740,7 @@ public sealed class TtsuImportPageTests
         m1.AutoMatchMetadata = true;
         m1.FolderFiles = [StatisticsFile(s1)];
         await m1.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(m1);
         m1.Selections[0].Mode = TtsuImportMode.Merge;
         m1.Selections[0].TargetId = workWithBinding.Id;
         await m1.OnPostReviewAsync(CancellationToken.None);
@@ -726,6 +754,7 @@ public sealed class TtsuImportPageTests
         m2.AutoMatchMetadata = true;
         m2.FolderFiles = [StatisticsFile(s2)];
         await m2.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(m2);
         m2.Selections[0].Mode = TtsuImportMode.Merge;
         m2.Selections[0].TargetId = workWithLink.Id;
         await m2.OnPostReviewAsync(CancellationToken.None);
@@ -739,6 +768,7 @@ public sealed class TtsuImportPageTests
         m3.AutoMatchMetadata = true;
         m3.FolderFiles = [StatisticsFile(s3)];
         await m3.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(m3);
         m3.Selections[0].Mode = TtsuImportMode.Merge;
         m3.Selections[0].TargetId = workWithCover.Id;
         await m3.OnPostReviewAsync(CancellationToken.None);
@@ -770,6 +800,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         // Initial preview: new work (Create) -> eligible
         Assert.True(model.Books[0].Enrichment!.IsMetadataApplicationEligible);
@@ -820,6 +851,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(firstStream, "Test Book"), StatisticsFile(secondStream, "Second Book")];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         // Unknown candidate key
         model.Selections[0].CandidateKey = Guid.NewGuid();
@@ -856,6 +888,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var candidate2Key = model.Books[0].Enrichment!.Candidates[1].Key;
         // User changes candidate choice in form without refreshing review
@@ -886,6 +919,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var oldToken = model.Selections[0].ReviewToken;
         var candidate2Key = model.Books[0].Enrichment!.Candidates[1].Key;
@@ -921,6 +955,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         // Confirm
         var result = await model.OnPostConfirmAsync(CancellationToken.None);
@@ -932,7 +967,7 @@ public sealed class TtsuImportPageTests
         Assert.Equal("Test Book", work.Title);
         Assert.Null(work.JitenDeckId);
         Assert.Null(work.JitenSubdeckId);
-        Assert.Null(work.JitenCoverUrl);
+        Assert.Null(work.CoverUrl);
         Assert.Null(work.JitenCharacterCount);
         Assert.Equal(2, work.Logs.Count);
     }
@@ -950,12 +985,16 @@ public sealed class TtsuImportPageTests
         {
             Handler = (reqs, _, _) =>
             {
-                var req1 = reqs.Single(r => r.RawTitle == "Test Book");
-                var req2 = reqs.Single(r => r.RawTitle == "Second Book");
+                var req = reqs.Single();
+                if (req.RawTitle == "Test Book")
+                {
+                    return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
+                        JitenMatchOutcome.Unavailable(req.CorrelationId, ["Jiten unavailable for book 1"])
+                    ]);
+                }
                 var c2 = CreateCandidate(202, title: "Second Book Match");
                 return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
-                    JitenMatchOutcome.Unavailable(req1.CorrelationId, ["Jiten unavailable for book 1"]),
-                    CreateMatchedOutcome(req2.CorrelationId, MatchConfidence.High, CreateScored(c2, 100))
+                    CreateMatchedOutcome(req.CorrelationId, MatchConfidence.High, CreateScored(c2, 100))
                 ]);
             }
         };
@@ -964,6 +1003,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(firstStream, "Test Book"), StatisticsFile(secondStream, "Second Book")];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var book1 = model.Books.Single(b => b.Title == "Test Book");
         var book2 = model.Books.Single(b => b.Title == "Second Book");
@@ -1035,6 +1075,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         Assert.NotNull(model.Selections[0].CandidateKey);
 
@@ -1075,6 +1116,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var result = await model.OnPostConfirmAsync(CancellationToken.None);
         Assert.Equal("/Library/Index", Assert.IsType<RedirectToPageResult>(result).PageName);
@@ -1082,7 +1124,8 @@ public sealed class TtsuImportPageTests
         database.Context.ChangeTracker.Clear();
         var work = await database.Context.MediaWorks.SingleAsync();
         Assert.Equal(99_999, work.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/fresh.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/fresh.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, work.CoverSource);
         Assert.Equal(10, work.JitenDeckId);
         Assert.Equal("Test Book", work.Title);
     }
@@ -1111,6 +1154,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         await model.OnPostConfirmAsync(CancellationToken.None);
 
@@ -1119,7 +1163,8 @@ public sealed class TtsuImportPageTests
         Assert.Equal(42, work.JitenDeckId);
         Assert.Null(work.JitenSubdeckId);
         Assert.Equal(80_000, work.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, work.CoverSource);
         Assert.Equal("Test Book", work.Title);
     }
 
@@ -1147,6 +1192,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         await model.OnPostConfirmAsync(CancellationToken.None);
 
@@ -1155,7 +1201,8 @@ public sealed class TtsuImportPageTests
         Assert.Equal(10, work.JitenDeckId);
         Assert.Equal(20, work.JitenSubdeckId);
         Assert.Equal(62_000, work.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/volume1.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/volume1.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, work.CoverSource);
         Assert.Equal("Test Book", work.Title);
     }
 
@@ -1183,6 +1230,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         await model.OnPostConfirmAsync(CancellationToken.None);
 
@@ -1237,6 +1285,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var result = await model.OnPostConfirmAsync(CancellationToken.None);
         Assert.Equal("/Library/Index", Assert.IsType<RedirectToPageResult>(result).PageName);
@@ -1245,7 +1294,7 @@ public sealed class TtsuImportPageTests
         var work = await database.Context.MediaWorks.Include(w => w.Logs).SingleAsync();
         Assert.Equal("Test Book", work.Title);
         Assert.False(work.HasJitenLink);
-        Assert.Null(work.JitenCoverUrl);
+        Assert.Null(work.CoverUrl);
         Assert.Equal(2, work.Logs.Count);
 
         var notice = (string)model.TempData["LibraryNotice"]!;
@@ -1274,6 +1323,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => model.OnPostConfirmAsync(CancellationToken.None));
 
@@ -1313,6 +1363,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() => model.OnPostConfirmAsync(cts.Token));
 
@@ -1333,16 +1384,19 @@ public sealed class TtsuImportPageTests
 
         var candidate1 = CreateCandidate(10, title: "Book 1 Match");
         var candidate2 = CreateCandidate(20, title: "Book 2 Match");
-
         var matchService = new StubJitenMatchService
         {
             Handler = (reqs, _, _) =>
             {
-                var req1 = reqs.Single(r => r.RawTitle == "Test Book");
-                var req2 = reqs.Single(r => r.RawTitle == "Second Book");
+                var req = reqs.Single();
+                if (req.RawTitle == "Test Book")
+                {
+                    return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
+                        CreateMatchedOutcome(req.CorrelationId, MatchConfidence.High, CreateScored(candidate1, 100))
+                    ]);
+                }
                 return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
-                    CreateMatchedOutcome(req1.CorrelationId, MatchConfidence.High, CreateScored(candidate1, 100)),
-                    CreateMatchedOutcome(req2.CorrelationId, MatchConfidence.High, CreateScored(candidate2, 100))
+                    CreateMatchedOutcome(req.CorrelationId, MatchConfidence.High, CreateScored(candidate2, 100))
                 ]);
             }
         };
@@ -1367,6 +1421,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(firstStream, "Test Book"), StatisticsFile(secondStream, "Second Book")];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var result = await model.OnPostConfirmAsync(CancellationToken.None);
         Assert.Equal("/Library/Index", Assert.IsType<RedirectToPageResult>(result).PageName);
@@ -1377,12 +1432,13 @@ public sealed class TtsuImportPageTests
 
         var secondWork = works.Single(w => w.Title == "Second Book");
         Assert.Equal(20, secondWork.JitenDeckId);
-        Assert.Equal("https://cdn.jiten.moe/2.jpg", secondWork.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/2.jpg", secondWork.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, secondWork.CoverSource);
         Assert.Equal(2, secondWork.Logs.Count);
 
         var firstWork = works.Single(w => w.Title == "Test Book");
         Assert.False(firstWork.HasJitenLink);
-        Assert.Null(firstWork.JitenCoverUrl);
+        Assert.Null(firstWork.CoverUrl);
         Assert.Equal(2, firstWork.Logs.Count);
 
         var notice = (string)model.TempData["LibraryNotice"]!;
@@ -1414,6 +1470,7 @@ public sealed class TtsuImportPageTests
         model.AutoMatchMetadata = true;
         model.FolderFiles = [StatisticsFile(fixtureStream)];
         await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
 
         var batchId = model.BatchId;
         var firstResult = await model.OnPostConfirmAsync(CancellationToken.None);
@@ -1430,6 +1487,365 @@ public sealed class TtsuImportPageTests
         Assert.Equal(callsAfterFirst, resolver.Invocations.Count);
         var notice = (string)model.TempData["LibraryNotice"]!;
         Assert.Contains("1 metadata linked, 0 metadata skipped", notice);
+    }
+
+    [Fact]
+    public async Task EnrichNext_ClaimsExactlyOneBookPerRequest_AndAdvancesCounters()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await File.ReadAllTextAsync(GetFixturePath());
+        using var firstStream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+        using var secondStream = new MemoryStream(Encoding.UTF8.GetBytes(
+            fixture.Replace("Test Book", "Second Book", StringComparison.Ordinal)));
+        var matchService = new StubJitenMatchService();
+        var model = CreateModel(database.Context, matchService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles =
+        [
+            StatisticsFile(firstStream, "Test Book"),
+            StatisticsFile(secondStream, "Second Book")
+        ];
+
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        Assert.Equal(0, model.EnrichmentCompletedCount);
+        Assert.Equal(2, model.EnrichmentTotalCount);
+
+        var res1 = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        var p1 = ReadEnrichProgress(res1);
+        Assert.False(p1.Complete);
+        Assert.Equal(1, p1.Completed);
+        Assert.Equal(2, p1.Total);
+        Assert.Single(matchService.Invocations);
+
+        var res2 = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        var p2 = ReadEnrichProgress(res2);
+        Assert.True(p2.Complete);
+        Assert.Equal(2, p2.Completed);
+        Assert.Equal(2, p2.Total);
+        Assert.Equal(2, matchService.Invocations.Count);
+    }
+
+    [Theory]
+    [InlineData(JitenMatchStatus.NoCandidates)]
+    [InlineData(JitenMatchStatus.Unavailable)]
+    [InlineData(JitenMatchStatus.RateLimited)]
+    public async Task EnrichNext_OutcomeStatuses_AdvanceCompletedCount(JitenMatchStatus status)
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (reqs, _, _) =>
+            {
+                var outcome = status switch
+                {
+                    JitenMatchStatus.NoCandidates => JitenMatchOutcome.NoCandidates(reqs[0].CorrelationId),
+                    JitenMatchStatus.Unavailable => JitenMatchOutcome.Unavailable(reqs[0].CorrelationId, ["Jiten down"]),
+                    JitenMatchStatus.RateLimited => JitenMatchOutcome.RateLimited(reqs[0].CorrelationId, ["Rate limited"]),
+                    _ => throw new InvalidOperationException()
+                };
+                return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([outcome]);
+            }
+        };
+        var model = CreateModel(database.Context, matchService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        var res = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        var progress = ReadEnrichProgress(res);
+        Assert.True(progress.Complete);
+        Assert.Equal(1, progress.Completed);
+        Assert.Equal(1, progress.Total);
+    }
+
+    [Fact]
+    public async Task EnrichNext_GenericLowScore_DoesNotAutoSelect_AndDoesNotAutoQueryGoogle()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var candidate = CreateCandidate(10, title: "Low Match", coverEvidence: JitenCoverEvidence.None);
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (reqs, _, _) => Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
+                CreateMatchedOutcome(reqs[0].CorrelationId, MatchConfidence.Review, CreateScored(candidate, 70))
+            ])
+        };
+        var googleService = new TtsuImportGoogleBooksPageTests.StubGoogleBooksCoverService();
+        var model = CreateModel(database.Context, matchService, googleCoverService: googleService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+
+        Assert.Null(model.Selections[0].CandidateKey);
+        Assert.Empty(googleService.ResolveInvocations);
+    }
+
+    [Fact]
+    public async Task EnrichNext_ReviewConfidence_ExactTitleAndVolume_QueriesGoogleWithoutAutoSelecting()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 10,
+            SubdeckId = 101,
+            OriginalTitle = "Volume 1",
+            ParentOriginalTitle = "Exact Title",
+            CharacterCount = 50_000,
+            CoverUrl = "https://example.com/cover.jpg",
+            CoverEvidence = JitenCoverEvidence.Specific
+        };
+        var scored = new ScoredCandidate
+        {
+            Candidate = candidate,
+            TotalScore = 85,
+            TitleScore = JitenCandidateScorer.MaxTitleScore, // 60
+            VolumeScore = JitenCandidateScorer.ExactVolumeScore, // 25
+            CharacterCountScore = 0,
+            CandidateVolume = StructuredVolume.Standard(1),
+            MatchedTitle = MatchedTitleVariant.Original,
+            Evidence = ["Exact title and volume matched"]
+        };
+        var parsed = new ParsedMediaTitle
+        {
+            OriginalTitle = "Exact Title 1",
+            ComparisonTitle = "exact title 1",
+            BaseTitle = "Exact Title",
+            Volume = StructuredVolume.Standard(1)
+        };
+        var outcome = JitenMatchOutcome.Matched(
+            Guid.Empty,
+            new JitenMatchResult
+            {
+                ParsedTitle = parsed,
+                Confidence = MatchConfidence.Review,
+                Candidates = [scored],
+                Evidence = ["Confidence: Review"]
+            });
+
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (reqs, _, _) => Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
+                outcome with { CorrelationId = reqs[0].CorrelationId }
+            ])
+        };
+        var googleService = new TtsuImportGoogleBooksPageTests.StubGoogleBooksCoverService
+        {
+            ResolveHandler = (ctx, _) => Task.FromResult(GoogleBooksCoverMatchResult.CreateMatched(
+                "vol1",
+                "https://books.google.com/cover.jpg",
+                "https://books.google.com/attribution",
+                ["Matched cover"]))
+        };
+        var model = CreateModel(database.Context, matchService, googleCoverService: googleService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        await model.OnPostReviewAsync(CancellationToken.None);
+
+        // Google is queried!
+        Assert.Single(googleService.ResolveInvocations);
+        // But Review confidence candidate is NOT auto-selected!
+        Assert.Null(model.Selections[0].CandidateKey);
+        // Candidate now holds the Google cover metadata
+        var enrichedCandidate = Assert.Single(model.Books[0].Enrichment!.Candidates);
+        Assert.True(enrichedCandidate.HasGoogleCover);
+        Assert.Equal("vol1", enrichedCandidate.GoogleVolumeId);
+    }
+
+    [Fact]
+    public async Task EnrichNext_DuplicateConcurrentCalls_DoNotProcessSameBookTwice()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var callCount = 0;
+        var matchService = new StubJitenMatchService
+        {
+            Handler = async (reqs, _, ct) =>
+            {
+                Interlocked.Increment(ref callCount);
+                await Task.Delay(50, ct);
+                return [JitenMatchOutcome.NoCandidates(reqs[0].CorrelationId)];
+            }
+        };
+        var model = CreateModel(database.Context, matchService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        var task1 = model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        var task2 = model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        await Task.WhenAll(task1, task2);
+
+        Assert.Equal(1, callCount);
+    }
+
+    [Fact]
+    public async Task EnrichNext_CallerCancellation_ResetsInProgressToPending()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        using var cts = new CancellationTokenSource();
+        var batchStore = new TtsuImportBatchStore(new MemoryCache(new MemoryCacheOptions()));
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (_, _, ct) =>
+            {
+                cts.Cancel();
+                ct.ThrowIfCancellationRequested();
+                return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([]);
+            }
+        };
+        var model = CreateModel(database.Context, matchService, batchStore: batchStore);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            model.OnPostEnrichNextAsync(model.BatchId, cts.Token));
+
+        Assert.True(batchStore.TryGet(model.BatchId, out var batch));
+        Assert.Equal(TtsuEnrichmentAttemptState.Pending, batch.Books[0].EnrichmentState);
+    }
+
+    [Fact]
+    public async Task EnrichNext_UnexpectedException_ResetsInProgressToPending()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var batchStore = new TtsuImportBatchStore(new MemoryCache(new MemoryCacheOptions()));
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (_, _, _) => throw new InvalidOperationException("Simulated unexpected failure")
+        };
+        var model = CreateModel(database.Context, matchService, batchStore: batchStore);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None));
+
+        Assert.True(batchStore.TryGet(model.BatchId, out var batch));
+        Assert.Equal(TtsuEnrichmentAttemptState.Pending, batch.Books[0].EnrichmentState);
+    }
+
+    [Fact]
+    public async Task EnrichNext_CompletedCalls_AreIdempotent()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var matchService = new StubJitenMatchService();
+        var model = CreateModel(database.Context, matchService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+
+        var first = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        var p1 = ReadEnrichProgress(first);
+        Assert.True(p1.Complete);
+        Assert.Single(matchService.Invocations);
+
+        // Calling again on completed batch
+        var second = await model.OnPostEnrichNextAsync(model.BatchId, CancellationToken.None);
+        var p2 = ReadEnrichProgress(second);
+        Assert.True(p2.Complete);
+        Assert.Equal(1, p2.Completed);
+        Assert.Equal(1, p2.Total);
+        Assert.Single(matchService.Invocations);
+    }
+
+    [Fact]
+    public async Task EnrichNext_ExpiredOrUnknownBatch_ReturnsNotFound()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var model = CreateModel(database.Context);
+        var result = await model.OnPostEnrichNextAsync(Guid.NewGuid(), CancellationToken.None);
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ImportPage_ManualSelection_Score55_IsSelectable()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var candidate = CreateCandidate(10, title: "Marginal Candidate");
+        var scored = CreateScored(candidate, 55);
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (reqs, _, _) => Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
+                CreateMatchedOutcome(reqs[0].CorrelationId, MatchConfidence.None, scored)
+            ])
+        };
+        var model = CreateModel(database.Context, matchService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
+
+        var previewCandidate = Assert.Single(model.Books.Single().Enrichment!.Candidates);
+        Assert.True(previewCandidate.IsSelectable);
+        Assert.Equal(55, previewCandidate.Score);
+        Assert.False(previewCandidate.IsDisqualified);
+
+        // User manually chooses this candidate
+        model.Selections[0].CandidateKey = previewCandidate.Key;
+        var reviewResult = await model.OnPostReviewAsync(CancellationToken.None);
+        Assert.IsType<PageResult>(reviewResult);
+        Assert.True(model.ModelState.IsValid);
+        Assert.Equal(previewCandidate.Key, model.Selections[0].CandidateKey);
+    }
+
+    [Fact]
+    public void ImportPage_SubdeckCandidate_DisplayTitleIncludesParentAndChild()
+    {
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 10,
+            SubdeckId = 20,
+            OriginalTitle = "Volume 1",
+            ParentOriginalTitle = "Re:Zero"
+        };
+        Assert.Equal("Re:Zero — Volume 1", candidate.DisplayTitle);
+    }
+
+    [Fact]
+    public async Task ImportPage_DisqualifiedCandidate_RemainsDisabled()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var candidate = CreateCandidate(10, title: "Disqualified Candidate");
+        var scored = CreateScored(candidate, 0) with
+        {
+            IsDisqualified = true,
+            DisqualificationReason = "Explicit volume conflict"
+        };
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (reqs, _, _) => Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
+                CreateMatchedOutcome(reqs[0].CorrelationId, MatchConfidence.None, scored)
+            ])
+        };
+        var model = CreateModel(database.Context, matchService);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
+
+        Assert.Empty(model.Books.Single().Enrichment!.Candidates);
+
+        // Trying to manually select disqualified/omitted candidate fails review
+        model.Selections[0].CandidateKey = Guid.NewGuid();
+        var reviewResult = await model.OnPostReviewAsync(CancellationToken.None);
+        Assert.IsType<PageResult>(reviewResult);
+        Assert.False(model.ModelState.IsValid);
+        Assert.Null(model.Selections[0].CandidateKey);
     }
 
     private static JitenMatchCandidate CreateCandidate(
@@ -1488,7 +1904,8 @@ public sealed class TtsuImportPageTests
         ImmersionDbContext context,
         StubJitenMatchService? matchService = null,
         IJitenSelectionResolver? selectionResolver = null,
-        ITtsuImportBatchStore? batchStore = null)
+        ITtsuImportBatchStore? batchStore = null,
+        IGoogleBooksCoverService? googleCoverService = null)
     {
         var httpContext = new DefaultHttpContext();
         var cache = new MemoryCache(new MemoryCacheOptions());
@@ -1497,13 +1914,47 @@ public sealed class TtsuImportPageTests
             batchStore ?? new TtsuImportBatchStore(cache),
             context,
             matchService ?? new StubJitenMatchService(),
-            selectionResolver ?? new StubJitenSelectionResolver())
+            selectionResolver ?? new StubJitenSelectionResolver(),
+            googleCoverService)
         {
             PageContext = new PageContext { HttpContext = httpContext },
             TempData = new TempDataDictionary(httpContext, new TestTempDataProvider())
         };
 
         return model;
+    }
+
+    private static async Task EnrichAllPendingAsync(TtsuModel model, CancellationToken cancellationToken = default)
+    {
+        while (true)
+        {
+            var result = await model.OnPostEnrichNextAsync(model.BatchId, cancellationToken);
+            if (result is JsonResult json && json.Value is not null)
+            {
+                var completeProp = json.Value.GetType().GetProperty("complete");
+                if (completeProp?.GetValue(json.Value) is true)
+                {
+                    break;
+                }
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        await model.OnPostReviewAsync(cancellationToken, fromEnrichment: true);
+    }
+
+    private static (bool Complete, int Completed, int Total) ReadEnrichProgress(IActionResult result)
+    {
+        var json = Assert.IsType<JsonResult>(result);
+        var val = json.Value!;
+        var t = val.GetType();
+        bool complete = (bool)t.GetProperty("complete")!.GetValue(val)!;
+        int completed = (int)t.GetProperty("processed")!.GetValue(val)!;
+        int total = (int)t.GetProperty("total")!.GetValue(val)!;
+        return (complete, completed, total);
     }
 
     private static FormFile StatisticsFile(Stream stream, string folderTitle = "Test Book")

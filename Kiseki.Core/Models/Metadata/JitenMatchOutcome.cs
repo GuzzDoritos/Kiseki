@@ -14,17 +14,20 @@ public sealed record JitenMatchOutcome
     public required JitenMatchStatus Status { get; init; }
     public JitenMatchResult? Result { get; init; }
     public IReadOnlyList<string> Warnings { get; init; } = [];
+    public string? MatchedAlias { get; init; }
 
     public static JitenMatchOutcome Matched(
         Guid correlationId,
         JitenMatchResult result,
-        IReadOnlyList<string>? warnings = null) =>
+        IReadOnlyList<string>? warnings = null,
+        string? matchedAlias = null) =>
         new()
         {
             CorrelationId = correlationId,
             Status = JitenMatchStatus.Matched,
             Result = result,
-            Warnings = warnings ?? []
+            Warnings = warnings ?? [],
+            MatchedAlias = matchedAlias
         };
 
     public static JitenMatchOutcome NoCandidates(

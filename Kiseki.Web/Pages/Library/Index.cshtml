@@ -133,6 +133,21 @@
                     }
                 </div>
             }
+
+            @if (Model.Works.Any(work => work.CoverSource == Kiseki.Core.Entities.MediaCoverSource.GoogleBooks))
+            {
+                <div class="google-books-list-attribution">
+                    <a href="https://books.google.com/"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       aria-label="Google Books">
+                        <img src="https://books.google.com/googlebooks/images/poweredby.png"
+                             alt="Powered by Google"
+                             loading="lazy"
+                             referrerpolicy="no-referrer" />
+                    </a>
+                </div>
+            }
             
         }
         else

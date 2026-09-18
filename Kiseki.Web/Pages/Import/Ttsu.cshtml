@@ -46,7 +46,52 @@
     <section class="ttsu-preview" aria-labelledby="ttsu-preview-title">
         <div class="ttsu-preview-heading"><h2 id="ttsu-preview-title">Review @Model.Books.Count @(Model.Books.Count == 1 ? "book" : "books")</h2><span>Nothing has been saved yet</span></div>
         <p>After changing a target or resolving a day, select <strong>Refresh review</strong> to see the resulting totals before confirming. Deselect any books you want to skip.</p>
-        <form method="post" asp-page-handler="Confirm">
+
+        @if (Model.IsEnrichmentActive)
+        {
+            <noscript>
+                <div class="alert alert-warning import-noscript-warning" role="alert">
+                    Automatic metadata matching requires JavaScript. Reading history import remains fully usable below without automatic metadata.
+                </div>
+            </noscript>
+            <div class="content-card ttsu-enrichment-progress-card" data-ttsu-auto-match-progress data-batch-id="@Model.BatchId" data-total="@Model.EnrichmentTotalCount" data-completed="@Model.EnrichmentCompletedCount">
+                <div class="ttsu-enrichment-progress-header">
+                    <div class="ttsu-enrichment-spinner" data-ttsu-progress-spinner aria-hidden="true"></div>
+                    <div>
+                        <h3 class="ttsu-enrichment-title">Matching book metadata and covers</h3>
+                        <p class="ttsu-progress-status" data-ttsu-progress-status>Looking up metadata and covers — @Model.EnrichmentCompletedCount of @Model.EnrichmentTotalCount books checked</p>
+                        <p class="ttsu-progress-summary" data-ttsu-progress-summary>Looking up metadata and covers — @Model.EnrichmentCompletedCount of @Model.EnrichmentTotalCount books checked</p>
+                        <p class="ttsu-progress-current-title text-muted text-truncate" data-ttsu-progress-current-title style="font-size: 0.85em; margin-top: 2px; max-width: 400px;"></p>
+                    </div>
+                </div>
+                <div class="progress ttsu-progress-bar-container">
+                    <div class="progress-bar ttsu-progress-bar-fill"
+                         role="progressbar"
+                         aria-label="Metadata matching progress"
+                         aria-valuemin="0"
+                         aria-valuemax="@Model.EnrichmentTotalCount"
+                         aria-valuenow="@Model.EnrichmentCompletedCount"
+                         style="width: @(Model.EnrichmentTotalCount > 0 ? (Model.EnrichmentCompletedCount * 100.0 / Model.EnrichmentTotalCount).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) : "0")%"
+                         data-ttsu-progress-bar>
+                    </div>
+                </div>
+                <p class="ttsu-progress-secondary" data-ttsu-progress-secondary>Searching Jiten, Google Books, and Open Library. Keep this page open.</p>
+                <div class="visually-hidden" aria-live="polite" aria-atomic="true" data-ttsu-progress-live>Checked @Model.EnrichmentCompletedCount of @Model.EnrichmentTotalCount books</div>
+                <div class="ttsu-progress-error-container" data-ttsu-progress-error hidden>
+                    <p class="import-warnings text-danger" data-ttsu-progress-error-message></p>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-ttsu-progress-resume>Resume lookup</button>
+                </div>
+            </div>
+        }
+
+        @if (!Model.IsGoogleBooksConfigured)
+        {
+            <aside class="ttsu-google-unconfigured-note" aria-label="Google Books notice">
+                Google Books cover lookup is unconfigured. Set <code>GoogleBooks:ApiKey</code> to enable automatic per-volume covers.
+            </aside>
+        }
+
+        <form method="post" asp-page-handler="Confirm" id="ttsuReviewForm">
             <input type="hidden" asp-for="BatchId" />
             <div class="ttsu-book-list">
             @for (var index = 0; index < Model.Books.Count; index++)
@@ -142,6 +187,12 @@
                             {
                                 <p class="import-warnings">@enrichment.IneligibilityReason</p>
                             }
+                            @if (enrichment.FilteredIncompatibleCount > 0)
+                            {
+                                <p class="filtered-incompatible-summary">
+                                    @(enrichment.FilteredIncompatibleCount == 1 ? "1 incompatible volume was ignored." : $"{enrichment.FilteredIncompatibleCount} other volumes were ignored.")
+                                </p>
+                            }
                             @if (enrichment.Warnings.Count > 0)
                             {
                                 <ul class="enrichment-warnings">
@@ -205,22 +256,128 @@
                                                     <span>@(candidate.SubdeckId.HasValue ? $"Subdeck {candidate.SubdeckId} (Deck {candidate.DeckId})" : $"Deck {candidate.DeckId}")</span>
                                                     <span>@candidate.CharacterCount.ToString("N0") characters</span>
                                                     <span>@candidate.Score pts</span>
-                                                     <span class="candidate-cover-label">@candidate.CoverEvidenceLabel</span>
-                                                 </div>
-                                                 @if (candidate.Evidence.Count > 0)
-                                                 {
-                                                     <ul class="candidate-evidence">
-                                                         @foreach (var evidence in candidate.Evidence)
-                                                         {
-                                                             <li>@evidence</li>
-                                                         }
-                                                     </ul>
-                                                 }
-                                             </div>
-                                         </label>
+                                                    <span class="candidate-cover-label">@candidate.CoverEvidenceLabel</span>
+                                                    @if (!string.IsNullOrWhiteSpace(candidate.CoverDimensionsLabel))
+                                                    {
+                                                        <span class="candidate-cover-dimensions">@candidate.CoverDimensionsLabel</span>
+                                                    }
+                                                    @if (candidate.IsGoogleLowResolution)
+                                                    {
+                                                        <span class="badge-low-resolution">Low resolution</span>
+                                                    }
+                                                    @if (candidate.CoverProvider == Kiseki.Core.Models.Covers.ExternalCoverProvider.OpenLibrary && !string.IsNullOrWhiteSpace(candidate.GoogleVolumeId))
+                                                    {
+                                                        <span class="open-library-preview-item" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;">
+                                                            <a href="@(candidate.GoogleAttributionLink ?? $"https://openlibrary.org/isbn/{candidate.GoogleVolumeId}")"
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               class="text-decoration-none"
+                                                               onclick="event.stopPropagation();"
+                                                               style="font-size: 0.85em;">
+                                                                Open Library
+                                                            </a>
+                                                        </span>
+                                                    }
+                                                    else if (candidate.HasGoogleCover && !string.IsNullOrWhiteSpace(candidate.GoogleVolumeId))
+                                                    {
+                                                        <span class="google-books-preview-item" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;">
+                                                            <a href="@(candidate.GoogleAttributionLink ?? $"https://books.google.com/books?id={candidate.GoogleVolumeId}")"
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               class="text-decoration-none"
+                                                               onclick="event.stopPropagation();"
+                                                               style="font-size: 0.85em;">
+                                                                Google Books
+                                                            </a>
+                                                            <img src="https://books.google.com/googlebooks/images/poweredby.png"
+                                                                 alt="Powered by Google"
+                                                                 loading="lazy"
+                                                                 referrerpolicy="no-referrer"
+                                                                 style="height: 12px; width: auto; vertical-align: middle;" />
+                                                        </span>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(candidate.GoogleStatusMessage))
+                                                {
+                                                    <span class="candidate-google-status">@candidate.GoogleStatusMessage</span>
+                                                }
+                                                @if (candidate.CoverOptions is { Count: > 1 } editionOptions)
+                                                {
+                                                    <details class="candidate-edition-options-details" style="margin-top: 8px;" onclick="event.stopPropagation();">
+                                                        <summary style="font-size: 0.85em; cursor: pointer; color: var(--color-primary, #6ea8fe);">Choose cover edition (@editionOptions.Count editions available)</summary>
+                                                        <div class="edition-options-list" style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
+                                                            @foreach (var opt in editionOptions)
+                                                            {
+                                                                var optId = $"edition_{opt.SelectionKey}_{index}";
+                                                                var isOptChecked = opt.SelectionKey == candidate.SelectedCoverKey;
+                                                                <div class="form-check" style="font-size: 0.85em;">
+                                                                    <input class="form-check-input" type="radio"
+                                                                           name="Selections[@index].SelectedCoverKey"
+                                                                           id="@optId"
+                                                                           value="@opt.SelectionKey"
+                                                                           @(isOptChecked ? "checked" : "") />
+                                                                    <label class="form-check-label" for="@optId">
+                                                                        <span class="badge bg-secondary">@(opt.Provider == Kiseki.Core.Models.Covers.ExternalCoverProvider.OpenLibrary ? "Open Library" : "Google Books")</span>
+                                                                        <span>@opt.Width×@opt.Height</span>
+                                                                        @if (opt.IsLowResolution)
+                                                                        {
+                                                                            <span class="badge-low-resolution">Low resolution</span>
+                                                                        }
+                                                                        @if (!string.IsNullOrWhiteSpace(opt.PublishedDate))
+                                                                        {
+                                                                            <span class="text-muted">(@opt.PublishedDate)</span>
+                                                                        }
+                                                                        @if (!string.IsNullOrWhiteSpace(opt.NormalizedIsbn))
+                                                                        {
+                                                                            <span class="text-muted">ISBN: @opt.NormalizedIsbn</span>
+                                                                        }
+                                                                    </label>
+                                                                </div>
+                                                            }
+                                                            <div class="form-check" style="font-size: 0.85em;">
+                                                                <input class="form-check-input" type="radio"
+                                                                       name="Selections[@index].SelectedCoverKey"
+                                                                       id="edition_none_@index"
+                                                                       value="none"
+                                                                       @(candidate.SelectedCoverKey == "none" ? "checked" : "") />
+                                                                <label class="form-check-label text-muted" for="edition_none_@index">
+                                                                    Use no external cover
+                                                                </label>
+                                                            </div>
+                                                        </div>
+                                                    </details>
+                                                }
+                                                @if (candidate.IsLowConfidence)
+                                                {
+                                                    <p class="candidate-low-confidence-warning">Not safe to choose automatically. Verify the title and volume before selecting.</p>
+                                                }
+                                                @if (candidate.IsDisqualified && !string.IsNullOrWhiteSpace(candidate.DisqualificationReason))
+                                                {
+                                                    <p class="candidate-disqualified-reason">@candidate.DisqualificationReason</p>
+                                                }
+                                                @if (candidate.Evidence.Count > 0)
+                                                {
+                                                    <details class="candidate-evidence-details">
+                                                        <summary>Why this matched</summary>
+                                                        <ul class="candidate-evidence">
+                                                            @foreach (var evidence in candidate.Evidence)
+                                                            {
+                                                                <li>@evidence</li>
+                                                            }
+                                                        </ul>
+                                                    </details>
+                                                }
+                                            </div>
+                                        </label>
                                     </div>
                                 }
                             </div>
+                            @if (enrichment.OmittedPlausibleCount > 0)
+                            {
+                                <p class="omitted-plausible-summary">
+                                    @(enrichment.OmittedPlausibleCount == 1 ? "1 additional same-volume candidate was omitted; link manually after import if none of these is correct." : $"{enrichment.OmittedPlausibleCount} additional same-volume candidates were omitted; link manually after import if none of these is correct.")
+                                </p>
+                            }
                         </div>
                     }
                     <details class="ttsu-entry-details" open="@(plan.Days.Any(day => day.ReviewReason is not null))">
@@ -273,8 +430,8 @@
             }
             </div>
             <div class="form-actions ttsu-confirm-actions">
-                <button class="btn btn-outline-secondary" type="submit" asp-page-handler="Review">Refresh review</button>
-                <button class="btn btn-primary" type="submit">Confirm selected books</button>
+                <button class="btn btn-outline-secondary" type="submit" asp-page-handler="Review" data-ttsu-action-btn disabled="@(Model.IsEnrichmentActive ? "disabled" : null)">Refresh review</button>
+                <button class="btn btn-primary" type="submit" data-ttsu-action-btn disabled="@(Model.IsEnrichmentActive ? "disabled" : null)">Confirm selected books</button>
                 <button class="btn btn-link" type="submit" asp-page-handler="Cancel" formnovalidate>Cancel</button>
             </div>
         </form>

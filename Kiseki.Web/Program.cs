@@ -1,6 +1,8 @@
 using Kiseki.Core;
 using Kiseki.Core.Services;
 using Kiseki.Core.Services.Metadata;
+using Kiseki.Core.Services.GoogleBooks;
+using Kiseki.Core.Services.OpenLibrary;
 using Kiseki.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -101,6 +103,28 @@ builder.Services.AddScoped<IJitenSelectionResolver, JitenSelectionResolver>();
 builder.Services.AddSingleton<IMediaTitleParser, MediaTitleParser>();
 builder.Services.AddSingleton<IJitenCandidateScorer, JitenCandidateScorer>();
 builder.Services.AddScoped<IJitenMatchService, JitenMatchService>();
+builder.Services.Configure<GoogleBooksOptions>(builder.Configuration.GetSection(GoogleBooksOptions.SectionName));
+builder.Services.AddHttpClient<IGoogleBooksClient, GoogleBooksClient>(client =>
+{
+    client.BaseAddress = new Uri("https://www.googleapis.com/books/v1/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+builder.Services.Configure<OpenLibraryOptions>(builder.Configuration.GetSection(OpenLibraryOptions.OpenLibrary));
+builder.Services.AddSingleton<OpenLibraryRateLimiter>();
+builder.Services.AddHttpClient<ICoverImageValidator, GoogleBooksImageValidator>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Kiseki/1.0 (Japanese Immersion Tracker)");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false
+});
+builder.Services.AddTransient<IGoogleBooksImageValidator>(sp => (IGoogleBooksImageValidator)sp.GetRequiredService<ICoverImageValidator>());
+builder.Services.AddScoped<IOpenLibraryCoverClient, OpenLibraryCoverClient>();
+builder.Services.AddSingleton<IGoogleBooksCoverMatcher, GoogleBooksCoverMatcher>();
+builder.Services.AddScoped<IGoogleBooksCoverService, GoogleBooksCoverService>();
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.None);
 builder.Services.AddSingleton<TtsuDataLoader>();
 builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
 builder.Services.AddSingleton<IAuthService, SinglePasswordAuthService>();

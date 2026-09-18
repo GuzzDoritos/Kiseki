@@ -65,20 +65,27 @@ public sealed record StructuredVolume
     {
         ArgumentNullException.ThrowIfNull(other);
 
-        if (Kind != other.Kind)
+        if (Kind == other.Kind)
         {
-            return false;
+            return Kind switch
+            {
+                VolumeKind.Standard => Number == other.Number,
+                VolumeKind.Fractional => Number == other.Number,
+                VolumeKind.Position => Position == other.Position,
+                VolumeKind.Special => string.Equals(SpecialTag, other.SpecialTag, StringComparison.OrdinalIgnoreCase) &&
+                                      Number == other.Number,
+                _ => false
+            };
         }
 
-        return Kind switch
+        // Allow numeric Special volume (e.g. EX 3, ShortStories 2) to match Standard volume with identical number
+        if ((Kind == VolumeKind.Special && other.Kind == VolumeKind.Standard) ||
+            (Kind == VolumeKind.Standard && other.Kind == VolumeKind.Special))
         {
-            VolumeKind.Standard => Number == other.Number,
-            VolumeKind.Fractional => Number == other.Number,
-            VolumeKind.Position => Position == other.Position,
-            VolumeKind.Special => string.Equals(SpecialTag, other.SpecialTag, StringComparison.OrdinalIgnoreCase) &&
-                                  Number == other.Number,
-            _ => false
-        };
+            return Number.HasValue && other.Number.HasValue && Number.Value == other.Number.Value;
+        }
+
+        return false;
     }
 
     public bool ConflictsWith(StructuredVolume other)
@@ -104,3 +111,9 @@ public sealed record StructuredVolume
         _ => RawMarker
     };
 }
+
+public sealed record CandidateVolumeExtraction(
+    IReadOnlyList<(MatchedTitleVariant Variant, StructuredVolume Volume)> VariantVolumes,
+    bool HasInternalConflict,
+    string? InternalConflictReason,
+    StructuredVolume? PrimaryVolume);

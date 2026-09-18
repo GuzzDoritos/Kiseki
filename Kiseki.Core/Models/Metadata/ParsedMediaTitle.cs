@@ -9,5 +9,8 @@ public sealed record ParsedMediaTitle
     public bool HasVolume => Volume is not null;
     public bool IsSpecialVolume => Volume?.IsSpecial ?? false;
     public IReadOnlyList<string> ParsingNotes { get; init; } = [];
+    public TitleSearchPlan? SearchPlan { get; init; }
+    public SeriesQualifier SeriesQualifier => SearchPlan?.SeriesQualifier ?? SeriesQualifier.Mainline;
+    public VolumeInferenceKind VolumeInference => SearchPlan?.VolumeInference ?? (Volume is not null ? VolumeInferenceKind.Explicit : VolumeInferenceKind.None);
 }
 

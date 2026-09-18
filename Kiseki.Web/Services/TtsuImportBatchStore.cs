@@ -11,9 +11,19 @@ public interface ITtsuImportBatchStore
     void Remove(Guid batchId);
 }
 
-public sealed class TtsuImportBatchStore(IMemoryCache cache) : ITtsuImportBatchStore
+public sealed class TtsuImportBatchStore : ITtsuImportBatchStore
 {
-    private static readonly TimeSpan BatchLifetime = TimeSpan.FromMinutes(30);
+    public static readonly TimeSpan SlidingLifetime = TimeSpan.FromMinutes(20);
+    public static readonly TimeSpan MaxAbsoluteLifetime = TimeSpan.FromHours(2);
+
+    private readonly IMemoryCache _cache;
+    private readonly TimeProvider _timeProvider;
+
+    public TtsuImportBatchStore(IMemoryCache cache, TimeProvider? timeProvider = null)
+    {
+        _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
 
     public TtsuImportBatch Store(IReadOnlyList<TtsuBookContainer> books)
     {
@@ -23,12 +33,14 @@ public sealed class TtsuImportBatchStore(IMemoryCache cache) : ITtsuImportBatchS
             Guid.NewGuid(),
             books.Select(book => new TtsuImportBatchBook(Guid.NewGuid(), book)).ToList());
 
-        cache.Set(
+        var now = _timeProvider.GetUtcNow();
+        _cache.Set(
             CacheKey(batch.Id),
             batch,
             new MemoryCacheEntryOptions
             {
-                AbsoluteExpirationRelativeToNow = BatchLifetime
+                SlidingExpiration = SlidingLifetime,
+                AbsoluteExpiration = now.Add(MaxAbsoluteLifetime)
             });
 
         return batch;
@@ -36,7 +48,7 @@ public sealed class TtsuImportBatchStore(IMemoryCache cache) : ITtsuImportBatchS
 
     public bool TryGet(Guid batchId, out TtsuImportBatch batch)
     {
-        if (cache.TryGetValue(CacheKey(batchId), out TtsuImportBatch? storedBatch) &&
+        if (_cache.TryGetValue(CacheKey(batchId), out TtsuImportBatch? storedBatch) &&
             storedBatch is not null)
         {
             batch = storedBatch;
@@ -49,7 +61,7 @@ public sealed class TtsuImportBatchStore(IMemoryCache cache) : ITtsuImportBatchS
 
     public void Remove(Guid batchId)
     {
-        cache.Remove(CacheKey(batchId));
+        _cache.Remove(CacheKey(batchId));
     }
 
     private static string CacheKey(Guid batchId) => $"ttsu-import:{batchId:N}";

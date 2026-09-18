@@ -335,8 +335,9 @@ public sealed class TtsuMergeServiceTests
         int? subdeckId = 11,
         string originalTitle = "Jiten Novel",
         int characterCount = 85_000,
-        string coverUrl = "https://cdn.jiten.moe/cover.jpg") =>
-        new(deckId, subdeckId, originalTitle, "Romaji", "English", characterCount, coverUrl, 0, JitenCoverEvidence.Specific);
+        string coverUrl = "https://cdn.jiten.moe/cover.jpg",
+        JitenCoverEvidence coverEvidence = JitenCoverEvidence.Specific) =>
+        new(deckId, subdeckId, originalTitle, "Romaji", "English", characterCount, coverUrl, 0, coverEvidence);
 
     internal static TtsuBookContainer BookWithTitle(string title, params TtsuReaderDTO[] entries) =>
         new()
@@ -378,7 +379,38 @@ public sealed class TtsuMergeServiceTests
         Assert.Equal(10, work.JitenDeckId);
         Assert.Equal(11, work.JitenSubdeckId);
         Assert.Equal(85_000, work.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/cover.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/cover.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, work.CoverSource);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_NewWork_PersistsParentFallbackCoverProvenance()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var incoming = BookWithTitle("TTSU Original Title", Entry(100, 1));
+        var plan = await db.Service.PreviewAsync(incoming, null);
+        var selection = CreateSelection(
+            10,
+            11,
+            "Jiten Original Title",
+            85_000,
+            "https://cdn.jiten.moe/series.jpg",
+            JitenCoverEvidence.ParentFallback);
+        var request = new TtsuImportRequest(
+            incoming,
+            null,
+            new Dictionary<DateOnly, string>(),
+            plan.Fingerprint,
+            Metadata: new TtsuMetadataImportRequest(selection));
+
+        var receipt = await db.Service.ApplyAsync(Guid.NewGuid(), [request]);
+
+        Assert.Equal(1, receipt.MetadataLinks);
+        Assert.Equal(0, receipt.MetadataSkips);
+        db.Context.ChangeTracker.Clear();
+        var work = await db.Context.MediaWorks.SingleAsync();
+        Assert.Equal("https://cdn.jiten.moe/series.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenParentFallback, work.CoverSource);
     }
 
     [Fact]
@@ -409,7 +441,8 @@ public sealed class TtsuMergeServiceTests
         Assert.Equal(20, work.JitenDeckId);
         Assert.Null(work.JitenSubdeckId);
         Assert.Equal(50_000, work.JitenCharacterCount);
-        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://cdn.jiten.moe/standalone.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, work.CoverSource);
     }
 
     [Fact]
@@ -442,7 +475,7 @@ public sealed class TtsuMergeServiceTests
         Assert.Equal(99, work.JitenDeckId);
         Assert.Null(work.JitenSubdeckId);
         Assert.Equal(120_000, work.JitenCharacterCount);
-        Assert.Equal("https://example.com/existing.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://example.com/existing.jpg", work.CoverUrl);
         Assert.Single(work.Logs);
     }
 
@@ -474,14 +507,23 @@ public sealed class TtsuMergeServiceTests
         db.Context.ChangeTracker.Clear();
         var work = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == existing.Id);
         Assert.False(work.HasJitenLink);
-        Assert.Equal("https://example.com/custom-cover.jpg", work.JitenCoverUrl);
+        Assert.Equal("https://example.com/custom-cover.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.UserOverride, work.CoverSource);
         Assert.Single(work.Logs);
     }
 
+    public enum ConcurrentAdditionKind
+    {
+        JitenLink,
+        UserOverride,
+        LegacyUnknown
+    }
+
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ApplyAsync_ConcurrentLinkOrCoverAddedAfterPreview_DoesNotInvalidateFingerprint_ImportsReadingAndSkipsMetadata(bool addLink)
+    [InlineData(ConcurrentAdditionKind.JitenLink)]
+    [InlineData(ConcurrentAdditionKind.UserOverride)]
+    [InlineData(ConcurrentAdditionKind.LegacyUnknown)]
+    public async Task ApplyAsync_ConcurrentLinkOrCoverAddedAfterPreview_DoesNotInvalidateFingerprint_ImportsReadingAndSkipsMetadata(ConcurrentAdditionKind additionKind)
     {
         await using var db = await ImportDatabase.CreateAsync();
         var existing = new MediaWork("Concurrent Book");
@@ -494,13 +536,17 @@ public sealed class TtsuMergeServiceTests
         var reviewedFingerprint = plan.Fingerprint;
 
         // 2. Concurrently link the work or add cover
-        if (addLink)
+        if (additionKind == ConcurrentAdditionKind.JitenLink)
         {
             existing.LinkToJitenDeck(42, 60_000, "https://example.com/concurrent.jpg");
         }
-        else
+        else if (additionKind == ConcurrentAdditionKind.UserOverride)
         {
             existing.UpdateCoverUrl("https://example.com/concurrent.jpg");
+        }
+        else
+        {
+            TestCoverState.SetLegacyUnknown(existing, "https://example.com/concurrent.jpg");
         }
         await db.Context.SaveChangesAsync();
 
@@ -522,8 +568,13 @@ public sealed class TtsuMergeServiceTests
 
         db.Context.ChangeTracker.Clear();
         var work = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == existing.Id);
-        Assert.Equal(addLink ? 42 : null, work.JitenDeckId);
-        Assert.Equal("https://example.com/concurrent.jpg", work.JitenCoverUrl);
+        Assert.Equal(additionKind == ConcurrentAdditionKind.JitenLink ? 42 : null, work.JitenDeckId);
+        Assert.Equal("https://example.com/concurrent.jpg", work.CoverUrl);
+        Assert.Equal(
+            additionKind == ConcurrentAdditionKind.JitenLink ? MediaCoverSource.JitenSpecific :
+            additionKind == ConcurrentAdditionKind.UserOverride ? MediaCoverSource.UserOverride :
+            MediaCoverSource.LegacyUnknown,
+            work.CoverSource);
         Assert.Single(work.Logs);
     }
 
@@ -549,7 +600,8 @@ public sealed class TtsuMergeServiceTests
         db.Context.ChangeTracker.Clear();
         var work = await db.Context.MediaWorks.SingleAsync();
         Assert.False(work.HasJitenLink);
-        Assert.Null(work.JitenCoverUrl);
+        Assert.Null(work.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, work.CoverSource);
     }
 
     [Fact]
@@ -574,7 +626,8 @@ public sealed class TtsuMergeServiceTests
         db.Context.ChangeTracker.Clear();
         var work = await db.Context.MediaWorks.SingleAsync();
         Assert.False(work.HasJitenLink);
-        Assert.Null(work.JitenCoverUrl);
+        Assert.Null(work.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, work.CoverSource);
     }
 
     [Fact]
@@ -621,11 +674,13 @@ public sealed class TtsuMergeServiceTests
 
         var w2 = works.Single(w => w.Title == "Existing With Cover");
         Assert.False(w2.HasJitenLink);
-        Assert.Equal("https://example.com/cover.jpg", w2.JitenCoverUrl);
+        Assert.Equal("https://example.com/cover.jpg", w2.CoverUrl);
+        Assert.Equal(MediaCoverSource.UserOverride, w2.CoverSource);
 
         var w3 = works.Single(w => w.Title == "Book 3");
         Assert.False(w3.HasJitenLink);
-        Assert.Null(w3.JitenCoverUrl);
+        Assert.Null(w3.CoverUrl);
+        Assert.Equal(MediaCoverSource.None, w3.CoverSource);
     }
 
     [Fact]

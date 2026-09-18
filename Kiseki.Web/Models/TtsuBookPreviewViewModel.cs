@@ -1,4 +1,6 @@
 using Kiseki.Core.Models;
+using Kiseki.Core.Models.Covers;
+using Kiseki.Core.Models.GoogleBooks;
 using Kiseki.Core.Models.Metadata;
 
 namespace Kiseki.Web.Models;
@@ -25,7 +27,21 @@ public sealed record TtsuCandidateChoiceViewModel(
     string CoverEvidenceLabel,
     IReadOnlyList<string> Evidence,
     bool IsTopCandidate,
-    bool IsSelectable);
+    bool IsSelectable,
+    string? GoogleVolumeId = null,
+    string? GoogleAttributionLink = null,
+    bool HasGoogleCover = false,
+    string? GoogleCoverWarning = null,
+    string? GoogleStatusMessage = null,
+    bool IsLowConfidence = false,
+    bool IsDisqualified = false,
+    string? DisqualificationReason = null,
+    GoogleBooksIdentityProof GoogleProof = GoogleBooksIdentityProof.None,
+    bool IsGoogleLowResolution = false,
+    IReadOnlyList<CoverEditionOption>? CoverOptions = null,
+    string? SelectedCoverKey = null,
+    ExternalCoverProvider? CoverProvider = null,
+    string? CoverDimensionsLabel = null);
 
 public sealed record TtsuBookEnrichmentViewModel(
     TtsuEnrichmentBadge Badge,
@@ -35,7 +51,9 @@ public sealed record TtsuBookEnrichmentViewModel(
     IReadOnlyList<TtsuCandidateChoiceViewModel> Candidates,
     Guid? SelectedCandidateKey,
     bool IsMetadataApplicationEligible,
-    string? IneligibilityReason);
+    string? IneligibilityReason,
+    int OmittedPlausibleCount = 0,
+    int FilteredIncompatibleCount = 0);
 
 public sealed record TtsuBookPreviewViewModel(
     Guid BookKey,
@@ -70,6 +88,7 @@ public sealed class TtsuBookSelectionInput
     public List<Guid> OrphanLogIds { get; set; } = [];
     public string ProgressChoice { get; set; } = string.Empty;
     public Guid? CandidateKey { get; set; }
+    public string? SelectedCoverKey { get; set; }
 }
 
 public sealed class TtsuDayResolutionInput
