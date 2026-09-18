@@ -57,8 +57,66 @@ public sealed class TtsuSchemaUpgradeTests
         Assert.Null(upgradedBinding.ProgressFraction);
         Assert.Equal(0, upgradedReceipt.ProgressUpdates);
         Assert.Equal(0, upgradedReceipt.CharacterTotalUpdates);
+        Assert.Equal(0, upgradedReceipt.MetadataLinks);
+        Assert.Equal(0, upgradedReceipt.MetadataSkips);
         Assert.Single(await db.Service.GetOrphansAsync());
         Assert.False((await db.Service.PreviewAsync(TtsuMergeServiceTests.Book(), work.Id)).CanApply);
+    }
+
+    [Fact]
+    public async Task MetadataReceiptCounts_UpgradesLegacyReceiptsWithoutDataLoss_AndIsIdempotent()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        // Drop and recreate receipts table without metadata columns
+        await db.Context.Database.ExecuteSqlRawAsync("""
+            DROP TABLE "TtsuImportReceipts";
+            CREATE TABLE "TtsuImportReceipts" (
+                "Id" TEXT NOT NULL PRIMARY KEY,
+                "Books" INTEGER NOT NULL,
+                "AddedDays" INTEGER NOT NULL,
+                "UpdatedDays" INTEGER NOT NULL,
+                "UnchangedDays" INTEGER NOT NULL,
+                "StaleDays" INTEGER NOT NULL,
+                "ProgressUpdates" INTEGER NOT NULL DEFAULT 0,
+                "CharacterTotalUpdates" INTEGER NOT NULL DEFAULT 0);
+            """);
+
+        var legacyReceiptId = Guid.NewGuid();
+        await db.Context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO \"TtsuImportReceipts\" VALUES ({legacyReceiptId}, 2, 5, 1, 3, 0, 2, 1)");
+
+        // Running upgrade twice must succeed without error (idempotent)
+        await SqliteSchemaUpgrade.ApplyAsync(db.Context);
+        await SqliteSchemaUpgrade.ApplyAsync(db.Context);
+
+        db.Context.ChangeTracker.Clear();
+        var upgraded = await db.Context.TtsuImportReceipts.SingleAsync(r => r.Id == legacyReceiptId);
+        Assert.Equal(2, upgraded.Books);
+        Assert.Equal(5, upgraded.AddedDays);
+        Assert.Equal(1, upgraded.UpdatedDays);
+        Assert.Equal(3, upgraded.UnchangedDays);
+        Assert.Equal(0, upgraded.StaleDays);
+        Assert.Equal(2, upgraded.ProgressUpdates);
+        Assert.Equal(1, upgraded.CharacterTotalUpdates);
+        Assert.Equal(0, upgraded.MetadataLinks);
+        Assert.Equal(0, upgraded.MetadataSkips);
+
+        // Verify that a new receipt with non-zero metadata counts can be added and queried
+        var newReceipt = new TtsuImportReceipt
+        {
+            Id = Guid.NewGuid(),
+            Books = 1,
+            AddedDays = 1,
+            MetadataLinks = 1,
+            MetadataSkips = 0
+        };
+        db.Context.TtsuImportReceipts.Add(newReceipt);
+        await db.Context.SaveChangesAsync();
+
+        db.Context.ChangeTracker.Clear();
+        var queried = await db.Context.TtsuImportReceipts.SingleAsync(r => r.Id == newReceipt.Id);
+        Assert.Equal(1, queried.MetadataLinks);
+        Assert.Equal(0, queried.MetadataSkips);
     }
 
     [Fact]

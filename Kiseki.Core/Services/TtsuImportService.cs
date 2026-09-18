@@ -101,11 +101,37 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                         request.OrphanLogIds, cancellationToken, request.ProgressResolution);
                     if (!plan.CanApply || plan.Fingerprint != request.ExpectedFingerprint)
                         throw new TtsuImportReviewRequiredException(plan.Error ?? "Statistics or choices changed. Review the refreshed preview before confirming.");
-                    var work = request.TargetId is null ? new MediaWork(request.Book.Title.Trim()) :
+                    var isNewWork = request.TargetId is null;
+                    var work = isNewWork ? new MediaWork(request.Book.Title.Trim()) :
                         await context.MediaWorks.Include(x => x.Logs).Include(x => x.MediaSeries).SingleAsync(x => x.Id == request.TargetId, cancellationToken);
-                    if (request.TargetId is null) context.MediaWorks.Add(work);
+                    if (isNewWork) context.MediaWorks.Add(work);
                     if (request.OrphanLogIds?.Count > 0)
                         work.Logs.AddRange(await context.ImmersionLogs.Where(x => request.OrphanLogIds.Contains(x.Id)).ToListAsync(cancellationToken));
+
+                    if (request.Metadata is not null)
+                    {
+                        if (request.Metadata.Selection is { } selection)
+                        {
+                            if (isNewWork)
+                            {
+                                selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
+                                receipt.MetadataLinks++;
+                            }
+                            else if (!work.HasJitenLink && work.JitenCoverUrl == null)
+                            {
+                                selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
+                                receipt.MetadataLinks++;
+                            }
+                            else
+                            {
+                                receipt.MetadataSkips++;
+                            }
+                        }
+                        else
+                        {
+                            receipt.MetadataSkips++;
+                        }
+                    }
                     var binding = await context.TtsuBindings.SingleOrDefaultAsync(x => x.MediaWorkId == work.Id, cancellationToken);
                     if (binding is null)
                     {

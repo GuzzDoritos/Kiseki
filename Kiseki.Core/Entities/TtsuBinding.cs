@@ -32,4 +32,6 @@ public sealed class TtsuImportReceipt
     public int StaleDays { get; set; }
     public int ProgressUpdates { get; set; }
     public int CharacterTotalUpdates { get; set; }
+    public int MetadataLinks { get; set; }
+    public int MetadataSkips { get; set; }
 }

@@ -78,7 +78,6 @@ public static class TtsuMergePlanner
             Progress = progress,
             work?.TtsuCharacterCount,
             work?.ManualCharacterCountOverride,
-            work?.JitenCharacterCount,
             work?.IsCompleted
         })));
         return new(work?.Id, work?.Title ?? book.Title, fingerprint, days,

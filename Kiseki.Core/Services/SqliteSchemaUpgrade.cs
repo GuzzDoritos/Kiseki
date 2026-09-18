@@ -28,7 +28,8 @@ public static class SqliteSchemaUpgrade
                 "Id" TEXT NOT NULL CONSTRAINT "PK_TtsuImportReceipts" PRIMARY KEY,
                 "Books" INTEGER NOT NULL, "AddedDays" INTEGER NOT NULL, "UpdatedDays" INTEGER NOT NULL,
                 "UnchangedDays" INTEGER NOT NULL, "StaleDays" INTEGER NOT NULL,
-                "ProgressUpdates" INTEGER NOT NULL DEFAULT 0, "CharacterTotalUpdates" INTEGER NOT NULL DEFAULT 0);
+                "ProgressUpdates" INTEGER NOT NULL DEFAULT 0, "CharacterTotalUpdates" INTEGER NOT NULL DEFAULT 0,
+                "MetadataLinks" INTEGER NOT NULL DEFAULT 0, "MetadataSkips" INTEGER NOT NULL DEFAULT 0);
             """, cancellationToken);
         var logColumns = await GetColumnsAsync(context, transaction, "ImmersionLogs", cancellationToken);
         if (!logColumns.Contains("TtsuBindingId"))
@@ -64,6 +65,10 @@ public static class SqliteSchemaUpgrade
             await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"TtsuImportReceipts\" ADD COLUMN \"ProgressUpdates\" INTEGER NOT NULL DEFAULT 0;", cancellationToken);
         if (!receiptColumns.Contains("CharacterTotalUpdates"))
             await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"TtsuImportReceipts\" ADD COLUMN \"CharacterTotalUpdates\" INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+        if (!receiptColumns.Contains("MetadataLinks"))
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"TtsuImportReceipts\" ADD COLUMN \"MetadataLinks\" INTEGER NOT NULL DEFAULT 0;", cancellationToken);
+        if (!receiptColumns.Contains("MetadataSkips"))
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"TtsuImportReceipts\" ADD COLUMN \"MetadataSkips\" INTEGER NOT NULL DEFAULT 0;", cancellationToken);
         await context.Database.ExecuteSqlRawAsync("""
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_ImmersionLogs_TtsuBindingId_Date" ON "ImmersionLogs" ("TtsuBindingId", "Date");
             """, cancellationToken);

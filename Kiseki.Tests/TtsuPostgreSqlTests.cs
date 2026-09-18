@@ -27,9 +27,11 @@ public sealed class TtsuPostgreSqlTests
     {
         await using var db = await PostgreSqlDatabase.CreateAsync();
         await using var context = db.Context();
-        await context.GetService<IMigrator>().MigrateAsync("20260911135026_InitialPostgreSql");
+        await context.GetService<IMigrator>().MigrateAsync("20260911173535_AddTtsuImportState");
         var workId = Guid.NewGuid();
+        var receiptId = Guid.NewGuid();
         await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"IsCompleted\") VALUES ({workId}, {"Book"}, {1}, {false})");
+        await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO \"TtsuImportReceipts\" (\"Id\", \"Books\", \"AddedDays\", \"UpdatedDays\", \"UnchangedDays\", \"StaleDays\") VALUES ({receiptId}, {1}, {1}, {0}, {0}, {0})");
         var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
         for (var i = 0; i < ids.Length; i++)
         {
@@ -41,6 +43,11 @@ public sealed class TtsuPostgreSqlTests
         var logs = await context.ImmersionLogs.AsNoTracking().ToListAsync();
         Assert.Equal(ids.Order(), logs.Select(x => x.Id).Order());
         Assert.All(logs, x => Assert.Null(x.SourceRevision));
+        var legacyReceipt = await context.TtsuImportReceipts.AsNoTracking().SingleAsync(x => x.Id == receiptId);
+        Assert.Equal(1, legacyReceipt.Books);
+        Assert.Equal(1, legacyReceipt.AddedDays);
+        Assert.Equal(0, legacyReceipt.MetadataLinks);
+        Assert.Equal(0, legacyReceipt.MetadataSkips);
         var service = new TtsuImportService(context);
         Assert.False((await service.PreviewAsync(Book(Entry(200, 2)), workId)).CanApply);
         await Apply(service, Book(Entry(200, 2)), workId, new() { [new(2026, 9, 1)] = "incoming:0" });
@@ -110,9 +117,24 @@ public sealed class TtsuPostgreSqlTests
         var lostResponse = new LostCommitResponse();
         await using var context = db.Context(lostResponse, retry: true);
         var service = new TtsuImportService(context);
-        var receipt = await Apply(service, Book(Entry(100, 1)));
+        var book = Book(Entry(100, 1));
+        var plan = await service.PreviewAsync(book, null);
+        var selection = CreateSelection(10, 11, "Jiten Novel", 85_000, "https://cdn.jiten.moe/cover.jpg");
+        var receipt = await service.ApplyAsync(Guid.NewGuid(),
+        [
+            new TtsuImportRequest(
+                book,
+                null,
+                new Dictionary<DateOnly, string>(),
+                plan.Fingerprint,
+                Metadata: new TtsuMetadataImportRequest(selection))
+        ]);
         Assert.Equal(1, receipt.AddedDays);
-        Assert.Single(await context.MediaWorks.ToListAsync());
+        Assert.Equal(1, receipt.MetadataLinks);
+        Assert.Equal(0, receipt.MetadataSkips);
+        var work = Assert.Single(await context.MediaWorks.ToListAsync());
+        Assert.Equal(10, work.JitenDeckId);
+        Assert.Equal(11, work.JitenSubdeckId);
         Assert.Single(await context.TtsuImportReceipts.ToListAsync());
         Assert.True(lostResponse.Thrown);
     }

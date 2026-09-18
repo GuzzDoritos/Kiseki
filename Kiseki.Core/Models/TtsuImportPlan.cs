@@ -41,8 +41,15 @@ public sealed record TtsuImportPlan(
 }
 public sealed record TtsuMatch(Guid? WorkId, string Reason, bool IsAmbiguous = false);
 public sealed record TtsuTarget(Guid Id, string Title);
+public sealed record TtsuMetadataImportRequest(JitenMediaSelection? Selection);
+
 public sealed record TtsuImportRequest(
-    DTOs.TtsuBookContainer Book, Guid? TargetId, IReadOnlyDictionary<DateOnly, string> Resolutions,
-    string ExpectedFingerprint, IReadOnlyList<Guid>? OrphanLogIds = null, string? ProgressResolution = null);
+    DTOs.TtsuBookContainer Book,
+    Guid? TargetId,
+    IReadOnlyDictionary<DateOnly, string> Resolutions,
+    string ExpectedFingerprint,
+    IReadOnlyList<Guid>? OrphanLogIds = null,
+    string? ProgressResolution = null,
+    TtsuMetadataImportRequest? Metadata = null);
 
 public sealed class TtsuImportReviewRequiredException(string message) : Exception(message);
