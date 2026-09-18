@@ -133,7 +133,7 @@ public sealed class MediaTitleParser : IMediaTitleParser
         List<string> notes)
     {
         // If the entire text consists of digits (e.g. "86"), never interpret it as a volume marker
-        if (decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out _))
+        if (Regex.IsMatch(text, @"^\d+(?:\.\d+)?$"))
         {
             notes.Add($"Retained numeric title '{text}' as base title");
             return (text, null);
@@ -144,40 +144,60 @@ public sealed class MediaTitleParser : IMediaTitleParser
         if (arcMatch.Success && TryExtractRemaining(text, arcMatch.Index, out var remainingArc))
         {
             var tag = arcMatch.Groups[1].Value;
-            var num = decimal.Parse(arcMatch.Groups[2].Value, CultureInfo.InvariantCulture);
-            notes.Add($"Extracted special arc volume '{tag} {num}'");
-            return (remainingArc, StructuredVolume.Special(tag, num, arcMatch.Value.Trim()));
+            if (decimal.TryParse(arcMatch.Groups[2].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var num))
+            {
+                notes.Add($"Extracted special arc volume '{tag} {num}'");
+                return (remainingArc, StructuredVolume.Special(tag, num, arcMatch.Value.Trim()));
+            }
+            notes.Add($"Oversized arc volume number in '{arcMatch.Value.Trim()}' retained in base title");
         }
 
         // 2. Special: Episode markers (e.g. "Ep.1", "Ep. 1", "Episode 1")
         var epMatch = Regex.Match(text, @"(?:\s+|^)(?:Ep\.?|Episode\.?)\s*(\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
         if (epMatch.Success && TryExtractRemaining(text, epMatch.Index, out var remainingEp))
         {
-            var num = decimal.Parse(epMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-            notes.Add($"Extracted special episode volume 'Episode {num}'");
-            return (remainingEp, StructuredVolume.Special("Episode", num, epMatch.Value.Trim()));
+            if (decimal.TryParse(epMatch.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var num))
+            {
+                notes.Add($"Extracted special episode volume 'Episode {num}'");
+                return (remainingEp, StructuredVolume.Special("Episode", num, epMatch.Value.Trim()));
+            }
+            notes.Add($"Oversized episode number in '{epMatch.Value.Trim()}' retained in base title");
         }
 
         // 3. Special: EX markers (e.g. "EX", "EX 1", "Ex.1")
         var exMatch = Regex.Match(text, @"(?:\s+|^)(?:EX|Ex\.?)(?:\s*(\d+(?:\.\d+)?))?$", RegexOptions.IgnoreCase);
         if (exMatch.Success && TryExtractRemaining(text, exMatch.Index, out var remainingEx))
         {
-            decimal? num = exMatch.Groups[1].Success
-                ? decimal.Parse(exMatch.Groups[1].Value, CultureInfo.InvariantCulture)
-                : null;
-            notes.Add($"Extracted special EX volume '{exMatch.Value.Trim()}'");
-            return (remainingEx, StructuredVolume.Special("EX", num, exMatch.Value.Trim()));
+            if (!exMatch.Groups[1].Success)
+            {
+                notes.Add($"Extracted special EX volume '{exMatch.Value.Trim()}'");
+                return (remainingEx, StructuredVolume.Special("EX", null, exMatch.Value.Trim()));
+            }
+
+            if (decimal.TryParse(exMatch.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var num))
+            {
+                notes.Add($"Extracted special EX volume '{exMatch.Value.Trim()}'");
+                return (remainingEx, StructuredVolume.Special("EX", num, exMatch.Value.Trim()));
+            }
+            notes.Add($"Oversized EX volume number in '{exMatch.Value.Trim()}' retained in base title");
         }
 
         // 4. Special: Short-story markers (e.g. "短編集 1", "短編集", "SS 1")
         var ssMatch = Regex.Match(text, @"(?:\s+|^)(?:短編集|短編|SS|Short\s+Stories)(?:\s*(\d+(?:\.\d+)?))?$", RegexOptions.IgnoreCase);
         if (ssMatch.Success && TryExtractRemaining(text, ssMatch.Index, out var remainingSs))
         {
-            decimal? num = ssMatch.Groups[1].Success
-                ? decimal.Parse(ssMatch.Groups[1].Value, CultureInfo.InvariantCulture)
-                : null;
-            notes.Add($"Extracted special short stories volume '{ssMatch.Value.Trim()}'");
-            return (remainingSs, StructuredVolume.Special("ShortStories", num, ssMatch.Value.Trim()));
+            if (!ssMatch.Groups[1].Success)
+            {
+                notes.Add($"Extracted special short stories volume '{ssMatch.Value.Trim()}'");
+                return (remainingSs, StructuredVolume.Special("ShortStories", null, ssMatch.Value.Trim()));
+            }
+
+            if (decimal.TryParse(ssMatch.Groups[1].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var num))
+            {
+                notes.Add($"Extracted special short stories volume '{ssMatch.Value.Trim()}'");
+                return (remainingSs, StructuredVolume.Special("ShortStories", num, ssMatch.Value.Trim()));
+            }
+            notes.Add($"Oversized short stories volume number in '{ssMatch.Value.Trim()}' retained in base title");
         }
 
         // 5. Japanese Position Marker (上 / 中 / 下)
@@ -204,27 +224,33 @@ public sealed class MediaTitleParser : IMediaTitleParser
         var daiKanMatch = Regex.Match(text, @"(?:\s+|^)第\s*(\d+(?:\.\d+)?)\s*巻$");
         if (daiKanMatch.Success && TryExtractRemaining(text, daiKanMatch.Index, out var remainingDaiKan))
         {
-            var rawNum = daiKanMatch.Groups[1].Value;
-            var vol = ParseNumberVolume(rawNum, daiKanMatch.Value.Trim(), notes);
-            return (remainingDaiKan, vol);
+            var vol = TryParseNumberVolume(daiKanMatch.Groups[1].Value, daiKanMatch.Value.Trim(), notes);
+            if (vol is not null)
+            {
+                return (remainingDaiKan, vol);
+            }
         }
 
         // 7. Explicit Japanese volume marker: …巻 (e.g. "1巻", "01巻", "14巻", "4.5巻")
         var kanMatch = Regex.Match(text, @"(?:\s+|^)(\d+(?:\.\d+)?)\s*巻$");
         if (kanMatch.Success && TryExtractRemaining(text, kanMatch.Index, out var remainingKan))
         {
-            var rawNum = kanMatch.Groups[1].Value;
-            var vol = ParseNumberVolume(rawNum, kanMatch.Value.Trim(), notes);
-            return (remainingKan, vol);
+            var vol = TryParseNumberVolume(kanMatch.Groups[1].Value, kanMatch.Value.Trim(), notes);
+            if (vol is not null)
+            {
+                return (remainingKan, vol);
+            }
         }
 
         // 8. Explicit Latin volume prefix: Vol. / Volume with Arabic or decimal (e.g. "Vol. 1", "Volume 14", "Vol. 4.5")
         var volArabicMatch = Regex.Match(text, @"(?:\s+|^)(?:vol\.|volume|vol|v)\s*(\d+(?:\.\d+)?)$", RegexOptions.IgnoreCase);
         if (volArabicMatch.Success && TryExtractRemaining(text, volArabicMatch.Index, out var remainingVolArabic))
         {
-            var rawNum = volArabicMatch.Groups[1].Value;
-            var vol = ParseNumberVolume(rawNum, volArabicMatch.Value.Trim(), notes);
-            return (remainingVolArabic, vol);
+            var vol = TryParseNumberVolume(volArabicMatch.Groups[1].Value, volArabicMatch.Value.Trim(), notes);
+            if (vol is not null)
+            {
+                return (remainingVolArabic, vol);
+            }
         }
 
         // 9. Explicit Latin volume prefix with Roman numerals: Vol. IV, Volume II, Vol IX
@@ -243,18 +269,22 @@ public sealed class MediaTitleParser : IMediaTitleParser
         var parenMatch = Regex.Match(text, @"(?:\s*[\(（](\d+(?:\.\d+)?)[\)）])$");
         if (parenMatch.Success && TryExtractRemaining(text, parenMatch.Index, out var remainingParen))
         {
-            var rawNum = parenMatch.Groups[1].Value;
-            var vol = ParseNumberVolume(rawNum, parenMatch.Value.Trim(), notes);
-            return (remainingParen, vol);
+            var vol = TryParseNumberVolume(parenMatch.Groups[1].Value, parenMatch.Value.Trim(), notes);
+            if (vol is not null)
+            {
+                return (remainingParen, vol);
+            }
         }
 
         // 11. Bare terminal Arabic number preceded by whitespace (e.g. " 01", " 14", " 4.5")
         var bareMatch = Regex.Match(text, @"\s+(\d+(?:\.\d+)?)$");
         if (bareMatch.Success && TryExtractRemaining(text, bareMatch.Index, out var remainingBare))
         {
-            var rawNum = bareMatch.Groups[1].Value;
-            var vol = ParseNumberVolume(rawNum, bareMatch.Value.Trim(), notes);
-            return (remainingBare, vol);
+            var vol = TryParseNumberVolume(bareMatch.Groups[1].Value, bareMatch.Value.Trim(), notes);
+            if (vol is not null)
+            {
+                return (remainingBare, vol);
+            }
         }
 
         // Check bare Roman numeral (e.g. "狼と香辛料 I"):
@@ -274,18 +304,28 @@ public sealed class MediaTitleParser : IMediaTitleParser
         return !string.IsNullOrWhiteSpace(remaining);
     }
 
-    private static StructuredVolume ParseNumberVolume(string rawNumber, string rawMarker, List<string> notes)
+    private static StructuredVolume? TryParseNumberVolume(string rawNumber, string rawMarker, List<string> notes)
     {
         if (rawNumber.Contains('.'))
         {
-            var dec = decimal.Parse(rawNumber, CultureInfo.InvariantCulture);
-            notes.Add($"Extracted fractional volume {dec} from '{rawMarker}'");
-            return StructuredVolume.Fractional(dec, rawMarker);
+            if (decimal.TryParse(rawNumber, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var dec))
+            {
+                notes.Add($"Extracted fractional volume {dec} from '{rawMarker}'");
+                return StructuredVolume.Fractional(dec, rawMarker);
+            }
+
+            notes.Add($"Oversized fractional volume '{rawMarker}' retained in base title");
+            return null;
         }
 
-        var num = int.Parse(rawNumber, CultureInfo.InvariantCulture);
-        notes.Add($"Extracted volume {num} from '{rawMarker}'");
-        return StructuredVolume.Standard(num, rawMarker);
+        if (int.TryParse(rawNumber, NumberStyles.None, CultureInfo.InvariantCulture, out var num))
+        {
+            notes.Add($"Extracted volume {num} from '{rawMarker}'");
+            return StructuredVolume.Standard(num, rawMarker);
+        }
+
+        notes.Add($"Oversized volume number '{rawMarker}' retained in base title");
+        return null;
     }
 
     private static bool TryParseRomanNumeral(string input, out int result)

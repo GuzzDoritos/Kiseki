@@ -7,7 +7,8 @@ public enum JitenSelectionStatus
     DeckNotFound,
     MismatchedParent,
     ParentHasChildren,
-    SubdeckNotFound
+    SubdeckNotFound,
+    InvalidCharacterCount
 }
 
 public sealed record JitenSelectionResult(

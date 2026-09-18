@@ -26,6 +26,7 @@ public sealed record ScoredCandidate
     public string? DisqualificationReason { get; init; }
     public MatchedTitleVariant MatchedTitle { get; init; }
     public bool IsPartialTitleMatch { get; init; }
+    public StructuredVolume? CandidateVolume { get; init; }
     public IReadOnlyList<string> Evidence { get; init; } = [];
 }
 

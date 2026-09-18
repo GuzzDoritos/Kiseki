@@ -354,5 +354,80 @@ public sealed class JitenCandidateScorerTests
         Assert.Equal(MatchConfidence.Review, result.Confidence);
         Assert.True(result.BestCandidate!.IsPartialTitleMatch);
     }
+
+    [Fact]
+    public void Score_EvidenceFormattingIsCultureInvariantUnderNonEnglishCulture()
+    {
+        var previousCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            // French culture formats 10.0% as "10,0 %"
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+
+            var parsed = _parser.Parse("Title 1");
+            var candidate = new JitenMatchCandidate
+            {
+                DeckId = 10,
+                SubdeckId = 11,
+                OriginalTitle = "Title 1",
+                CharacterCount = 100_000
+            };
+
+            var result = _scorer.Score(parsed, [candidate], 90_000);
+
+            Assert.NotEmpty(result.BestCandidate!.Evidence);
+            Assert.Contains("TTSU total differs by 10.0 %", result.BestCandidate.Evidence);
+            Assert.DoesNotContain("10,0", string.Join(" | ", result.BestCandidate.Evidence));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = previousCulture;
+        }
+    }
+
+    [Fact]
+    public void Score_ConsistentCrossLanguageVolumesWork()
+    {
+        var parsed = _parser.Parse("Overlord 1");
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 10,
+            SubdeckId = 11,
+            OriginalTitle = "Overlord 1",
+            EnglishTitle = "Overlord Vol. 1",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate], 100_000);
+
+        Assert.NotNull(result.BestCandidate);
+        Assert.False(result.BestCandidate.IsDisqualified);
+        Assert.Equal(35, result.BestCandidate.VolumeScore);
+        Assert.Equal(40, result.BestCandidate.TitleScore);
+        Assert.Equal(MatchConfidence.High, result.Confidence);
+    }
+
+    [Fact]
+    public void Score_ConflictingCrossLanguageVolumesDisqualifyAndCannotBecomeHigh()
+    {
+        var parsed = _parser.Parse("Overlord 1");
+        var candidate = new JitenMatchCandidate
+        {
+            DeckId = 10,
+            SubdeckId = 11,
+            OriginalTitle = "Overlord 1",
+            EnglishTitle = "Overlord Vol. 2",
+            CharacterCount = 100_000
+        };
+
+        var result = _scorer.Score(parsed, [candidate], 100_000);
+
+        Assert.NotNull(result.BestCandidate);
+        Assert.True(result.BestCandidate.IsDisqualified);
+        Assert.Equal(0, result.BestCandidate.TotalScore);
+        Assert.NotEqual(MatchConfidence.High, result.Confidence);
+        Assert.Equal(MatchConfidence.None, result.Confidence);
+        Assert.Contains("Conflicting volume markers across candidate title variants", result.BestCandidate.DisqualificationReason);
+    }
 }
 

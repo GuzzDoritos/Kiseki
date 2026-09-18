@@ -119,7 +119,7 @@ public sealed class JitenApiClient : IJitenApiClient
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        EnsureSuccess(response);
         return await response.Content.ReadFromJsonAsync<JitenFranchiseDTO>(
             JsonOptions,
             cancellationToken);
@@ -139,13 +139,13 @@ public sealed class JitenApiClient : IJitenApiClient
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        EnsureSuccess(response);
         return await response.Content.ReadFromJsonAsync<JitenDeckDetailResponseDTO>(
             JsonOptions,
             cancellationToken);
     }
 
-    private Task<JitenResponseContainerDTO?> GetSearchPageAsync(
+    private async Task<JitenResponseContainerDTO?> GetSearchPageAsync(
         string encodedQuery,
         int offset,
         CancellationToken cancellationToken)
@@ -155,9 +155,40 @@ public sealed class JitenApiClient : IJitenApiClient
             $"?offset={offset}&mediaType=4&wordId=0&readingIndex=0" +
             $"&titleFilter={encodedQuery}&sortOrder=0";
 
-        return _httpClient.GetFromJsonAsync<JitenResponseContainerDTO>(
+        using var response = await _httpClient.GetAsync(
             endpoint,
+            cancellationToken);
+
+        EnsureSuccess(response);
+        return await response.Content.ReadFromJsonAsync<JitenResponseContainerDTO>(
             JsonOptions,
             cancellationToken);
+    }
+
+    private static void EnsureSuccess(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        TimeSpan? retryAfter = null;
+        if (response.Headers.RetryAfter is not null)
+        {
+            if (response.Headers.RetryAfter.Delta.HasValue)
+            {
+                retryAfter = response.Headers.RetryAfter.Delta.Value;
+            }
+            else if (response.Headers.RetryAfter.Date.HasValue)
+            {
+                var delta = response.Headers.RetryAfter.Date.Value - DateTimeOffset.UtcNow;
+                retryAfter = delta > TimeSpan.Zero ? delta : TimeSpan.Zero;
+            }
+        }
+
+        throw new JitenHttpException(
+            $"Jiten API request to '{response.RequestMessage?.RequestUri}' failed with status code {(int)response.StatusCode} ({response.StatusCode}).",
+            response.StatusCode,
+            retryAfter);
     }
 }

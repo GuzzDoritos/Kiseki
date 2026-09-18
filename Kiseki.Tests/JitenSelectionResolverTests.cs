@@ -204,6 +204,35 @@ public sealed class JitenSelectionResolverTests
         Assert.Null(result.Selection);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ResolveAsync_RejectsNegativeCharacterCounts(bool selectSubdeck)
+    {
+        var stub = new StubJitenApiClient
+        {
+            Detail = new JitenDeckDetailDTO
+            {
+                MainDeck = new JitenDeckDTO
+                {
+                    DeckId = 10,
+                    CharacterCount = selectSubdeck ? 0 : -1,
+                    ChildrenDeckCount = selectSubdeck ? 1 : 0
+                },
+                SubDecks = selectSubdeck
+                    ? [new JitenDeckDTO { DeckId = 11, CharacterCount = -1 }]
+                    : []
+            }
+        };
+
+        var resolver = new JitenSelectionResolver(stub);
+        var result = await resolver.ResolveAsync(10, selectSubdeck ? 11 : null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(JitenSelectionStatus.InvalidCharacterCount, result.Status);
+        Assert.Null(result.Selection);
+    }
+
     [Fact]
     public async Task ResolveAsync_RejectsWhenDetailIsNull()
     {
@@ -230,6 +259,42 @@ public sealed class JitenSelectionResolverTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             resolver.ResolveAsync(parentDeckId: 10, subdeckId: null, cancellationToken: cts.Token));
+    }
+
+    [Fact]
+    public void Resolve_PureOverload_ResolvesSubdeckAndStandaloneDirectly()
+    {
+        var stub = new StubJitenApiClient();
+        var resolver = new JitenSelectionResolver(stub);
+
+        var detail = new JitenDeckDetailDTO
+        {
+            MainDeck = new JitenDeckDTO
+            {
+                DeckId = 10,
+                OriginalTitle = "Series",
+                CoverName = "https://cdn.jiten.moe/series.jpg",
+                ChildrenDeckCount = 1
+            },
+            SubDecks =
+            [
+                new JitenDeckDTO
+                {
+                    DeckId = 11,
+                    OriginalTitle = "Volume 1",
+                    CharacterCount = 90_000,
+                    CoverName = "https://cdn.jiten.moe/v1.jpg"
+                }
+            ]
+        };
+
+        var result = resolver.Resolve(detail, parentDeckId: 10, subdeckId: 11);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Selection);
+        Assert.Equal(10, result.Selection.DeckId);
+        Assert.Equal(11, result.Selection.SubdeckId);
+        Assert.Null(stub.LastDetailDeckId);
     }
 
     private sealed class StubJitenApiClient : IJitenApiClient

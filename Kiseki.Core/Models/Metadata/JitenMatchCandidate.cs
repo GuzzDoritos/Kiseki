@@ -13,6 +13,7 @@ public sealed record JitenMatchCandidate
     public int CharacterCount { get; init; }
     public int ChildrenDeckCount { get; init; }
     public string? CoverUrl { get; init; }
+    public JitenCoverEvidence CoverEvidence { get; init; } = JitenCoverEvidence.None;
 
     public bool IsSubdeck => SubdeckId.HasValue;
     public bool IsStandalone => !SubdeckId.HasValue && ChildrenDeckCount == 0;
@@ -40,39 +41,35 @@ public sealed record JitenMatchCandidate
         }
     }
 
-    public static JitenMatchCandidate FromDeck(JitenDeckDTO deck)
+    public static JitenMatchCandidate FromSelection(JitenMediaSelection selection)
     {
-        ArgumentNullException.ThrowIfNull(deck);
+        ArgumentNullException.ThrowIfNull(selection);
 
         return new JitenMatchCandidate
         {
-            DeckId = deck.DeckId,
-            SubdeckId = null,
-            OriginalTitle = deck.OriginalTitle?.Trim() ?? string.Empty,
-            RomajiTitle = deck.RomajiTitle?.Trim() ?? string.Empty,
-            EnglishTitle = deck.EnglishTitle?.Trim() ?? string.Empty,
-            CharacterCount = deck.CharacterCount,
-            ChildrenDeckCount = deck.ChildrenDeckCount,
-            CoverUrl = deck.CoverName
+            DeckId = selection.DeckId,
+            SubdeckId = selection.SubdeckId,
+            OriginalTitle = selection.OriginalTitle,
+            RomajiTitle = selection.RomajiTitle,
+            EnglishTitle = selection.EnglishTitle,
+            CharacterCount = selection.CharacterCount,
+            ChildrenDeckCount = selection.ChildrenDeckCount,
+            CoverUrl = selection.CoverUrl,
+            CoverEvidence = selection.CoverEvidence
         };
+    }
+
+    public static JitenMatchCandidate FromDeck(JitenDeckDTO deck)
+    {
+        ArgumentNullException.ThrowIfNull(deck);
+        return FromSelection(JitenMediaSelection.FromDeck(deck));
     }
 
     public static JitenMatchCandidate FromSubdeck(JitenDeckDTO parentDeck, JitenDeckDTO subdeck)
     {
         ArgumentNullException.ThrowIfNull(parentDeck);
         ArgumentNullException.ThrowIfNull(subdeck);
-
-        return new JitenMatchCandidate
-        {
-            DeckId = parentDeck.DeckId,
-            SubdeckId = subdeck.DeckId,
-            OriginalTitle = subdeck.OriginalTitle?.Trim() ?? string.Empty,
-            RomajiTitle = subdeck.RomajiTitle?.Trim() ?? string.Empty,
-            EnglishTitle = subdeck.EnglishTitle?.Trim() ?? string.Empty,
-            CharacterCount = subdeck.CharacterCount,
-            ChildrenDeckCount = subdeck.ChildrenDeckCount,
-            CoverUrl = !string.IsNullOrWhiteSpace(subdeck.CoverName) ? subdeck.CoverName : parentDeck.CoverName
-        };
+        return FromSelection(JitenMediaSelection.FromSubdeck(parentDeck, subdeck));
     }
 }
 

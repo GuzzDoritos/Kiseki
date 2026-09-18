@@ -1,3 +1,4 @@
+using System.Globalization;
 using Kiseki.Core.Models.Metadata;
 
 namespace Kiseki.Core.Services.Metadata;
@@ -63,7 +64,7 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
             }
             else if (best is not null)
             {
-                resultEvidence.Add($"Score {best.TotalScore} below review threshold {ReviewConfidenceThreshold}.");
+                resultEvidence.Add(string.Create(CultureInfo.InvariantCulture, $"Score {best.TotalScore} below review threshold {ReviewConfidenceThreshold}."));
             }
             else
             {
@@ -95,8 +96,7 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
         // 3. Margin >= 10
         // 4. Base title was not a partial match
         // 5. Volume marker is not special or fractional
-        var candidateVolume = ExtractCandidateVolume(best.Candidate);
-        var isSpecial = parsedTitle.IsSpecialVolume || (candidateVolume?.IsSpecial ?? false);
+        var isSpecial = parsedTitle.IsSpecialVolume || (best.CandidateVolume?.IsSpecial ?? false);
 
         if (best.TotalScore >= HighConfidenceThreshold &&
             runnerUpMargin >= HighConfidenceMinMargin &&
@@ -121,7 +121,7 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
 
         if (best.TotalScore >= HighConfidenceThreshold && runnerUpMargin < HighConfidenceMinMargin)
         {
-            resultEvidence.Add($"Close runner-up (margin {runnerUpMargin} < {HighConfidenceMinMargin}) requires review");
+            resultEvidence.Add(string.Create(CultureInfo.InvariantCulture, $"Close runner-up (margin {runnerUpMargin} < {HighConfidenceMinMargin}) requires review"));
         }
 
         if (best.IsPartialTitleMatch)
@@ -161,15 +161,107 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
                 DisqualificationReason = "Parent deck has subdecks and cannot be linked directly to a work.",
                 MatchedTitle = MatchedTitleVariant.None,
                 IsPartialTitleMatch = false,
+                CandidateVolume = null,
                 Evidence = ["Parent deck has subdecks and cannot be linked directly to a work."]
             };
         }
 
+        // Parse each non-empty variant once per candidate
+        ParsedMediaTitle? parsedOriginal = !string.IsNullOrWhiteSpace(candidate.OriginalTitle)
+            ? _titleParser.Parse(candidate.OriginalTitle)
+            : null;
+
+        ParsedMediaTitle? parsedEnglish = !string.IsNullOrWhiteSpace(candidate.EnglishTitle)
+            ? _titleParser.Parse(candidate.EnglishTitle)
+            : null;
+
+        ParsedMediaTitle? parsedRomaji = !string.IsNullOrWhiteSpace(candidate.RomajiTitle)
+            ? _titleParser.Parse(candidate.RomajiTitle)
+            : null;
+
+        // Collect all explicit volumes across non-empty variants
+        var variantVolumes = new List<(MatchedTitleVariant Variant, StructuredVolume Volume)>();
+        if (parsedOriginal?.Volume is not null)
+        {
+            variantVolumes.Add((MatchedTitleVariant.Original, parsedOriginal.Volume));
+        }
+        if (parsedEnglish?.Volume is not null)
+        {
+            variantVolumes.Add((MatchedTitleVariant.English, parsedEnglish.Volume));
+        }
+        if (parsedRomaji?.Volume is not null)
+        {
+            variantVolumes.Add((MatchedTitleVariant.Romaji, parsedRomaji.Volume));
+        }
+
+        // Check for conflicting volumes across candidate title variants
+        bool hasInternalConflict = false;
+        string? internalConflictReason = null;
+        for (var i = 0; i < variantVolumes.Count; i++)
+        {
+            for (var j = i + 1; j < variantVolumes.Count; j++)
+            {
+                if (variantVolumes[i].Volume.ConflictsWith(variantVolumes[j].Volume))
+                {
+                    hasInternalConflict = true;
+                    internalConflictReason = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Conflicting volume markers across candidate title variants: {variantVolumes[i].Variant} ({variantVolumes[i].Volume.RawMarker}) vs {variantVolumes[j].Variant} ({variantVolumes[j].Volume.RawMarker})");
+                    break;
+                }
+            }
+            if (hasInternalConflict)
+            {
+                break;
+            }
+        }
+
         // 1. Base Title Matching (0 - 40)
-        var (titleScore, matchedVariant, isPartialTitle) = ScoreBaseTitle(parsedTitle.BaseTitle, candidate, evidence);
+        var (titleScore, matchedVariant, isPartialTitle) = ScoreBaseTitleWithParsed(
+            parsedTitle.BaseTitle,
+            parsedOriginal,
+            parsedEnglish,
+            parsedRomaji,
+            evidence);
 
         // 2. Volume Identity Matching (0 - 35)
-        var (volumeScore, isVolumeDisqualified, volumeConflictReason) = ScoreVolume(parsedTitle, candidate, evidence);
+        int volumeScore = 0;
+        bool isVolumeDisqualified = false;
+        string? volumeDisqualificationReason = null;
+        StructuredVolume? candidateVolume = null;
+
+        if (hasInternalConflict)
+        {
+            isVolumeDisqualified = true;
+            volumeDisqualificationReason = internalConflictReason;
+            evidence.Add(internalConflictReason!);
+        }
+        else
+        {
+            // Prefer the matched variant's marker when available
+            if (matchedVariant == MatchedTitleVariant.Original && parsedOriginal?.Volume is not null)
+            {
+                candidateVolume = parsedOriginal.Volume;
+            }
+            else if (matchedVariant == MatchedTitleVariant.English && parsedEnglish?.Volume is not null)
+            {
+                candidateVolume = parsedEnglish.Volume;
+            }
+            else if (matchedVariant == MatchedTitleVariant.Romaji && parsedRomaji?.Volume is not null)
+            {
+                candidateVolume = parsedRomaji.Volume;
+            }
+            else
+            {
+                candidateVolume = variantVolumes.FirstOrDefault().Volume;
+            }
+
+            (volumeScore, isVolumeDisqualified, volumeDisqualificationReason) = ScoreVolume(
+                parsedTitle.Volume,
+                candidateVolume,
+                candidate.IsStandalone,
+                evidence);
+        }
 
         // 3. Character Count Sanity (0 - 20)
         var charScore = ScoreCharacterCount(authoritativeTtsuTotal, candidate.CharacterCount, evidence);
@@ -185,16 +277,19 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
             VolumeScore = volumeScore,
             CharacterCountScore = charScore,
             IsDisqualified = isDisqualified,
-            DisqualificationReason = volumeConflictReason,
+            DisqualificationReason = volumeDisqualificationReason,
             MatchedTitle = matchedVariant,
             IsPartialTitleMatch = isPartialTitle,
+            CandidateVolume = candidateVolume,
             Evidence = evidence
         };
     }
 
-    private (int Score, MatchedTitleVariant Variant, bool IsPartial) ScoreBaseTitle(
+    private static (int Score, MatchedTitleVariant Variant, bool IsPartial) ScoreBaseTitleWithParsed(
         string workBaseTitle,
-        JitenMatchCandidate candidate,
+        ParsedMediaTitle? original,
+        ParsedMediaTitle? english,
+        ParsedMediaTitle? romaji,
         List<string> evidence)
     {
         if (string.IsNullOrWhiteSpace(workBaseTitle))
@@ -203,24 +298,22 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
             return (0, MatchedTitleVariant.None, false);
         }
 
-        // Check variants in priority: Original -> English -> Romaji
         var variants = new[]
         {
-            (candidate.OriginalTitle, MatchedTitleVariant.Original, "original"),
-            (candidate.EnglishTitle, MatchedTitleVariant.English, "English"),
-            (candidate.RomajiTitle, MatchedTitleVariant.Romaji, "romaji")
+            (original, MatchedTitleVariant.Original, "original"),
+            (english, MatchedTitleVariant.English, "English"),
+            (romaji, MatchedTitleVariant.Romaji, "romaji")
         };
 
         // First check exact matches
-        foreach (var (title, variant, name) in variants)
+        foreach (var (parsed, variant, name) in variants)
         {
-            if (string.IsNullOrWhiteSpace(title))
+            if (parsed is null || string.IsNullOrWhiteSpace(parsed.BaseTitle))
             {
                 continue;
             }
 
-            var parsedCandidateTitle = _titleParser.Parse(title);
-            if (string.Equals(workBaseTitle, parsedCandidateTitle.BaseTitle, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(workBaseTitle, parsed.BaseTitle, StringComparison.OrdinalIgnoreCase))
             {
                 evidence.Add($"Exact {name} base title matched");
                 return (MaxTitleScore, variant, false);
@@ -229,17 +322,14 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
 
         // Next check conservative partial matches:
         // One contains the other and covers at least 70% of length, with minimum 4 characters
-        foreach (var (title, variant, name) in variants)
+        foreach (var (parsed, variant, name) in variants)
         {
-            if (string.IsNullOrWhiteSpace(title))
+            if (parsed is null || string.IsNullOrWhiteSpace(parsed.BaseTitle))
             {
                 continue;
             }
 
-            var parsedCandidateTitle = _titleParser.Parse(title);
-            var cBase = parsedCandidateTitle.BaseTitle;
-
-            if (IsConservativePartialMatch(workBaseTitle, cBase))
+            if (IsConservativePartialMatch(workBaseTitle, parsed.BaseTitle))
             {
                 evidence.Add($"Partial {name} base title match");
                 return (PartialTitleScore, variant, true);
@@ -269,19 +359,17 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
                titleB.Contains(titleA, StringComparison.OrdinalIgnoreCase);
     }
 
-    private (int Score, bool IsDisqualified, string? Reason) ScoreVolume(
-        ParsedMediaTitle parsedTitle,
-        JitenMatchCandidate candidate,
+    private static (int Score, bool IsDisqualified, string? Reason) ScoreVolume(
+        StructuredVolume? workVolume,
+        StructuredVolume? candidateVolume,
+        bool isCandidateStandalone,
         List<string> evidence)
     {
-        var workVolume = parsedTitle.Volume;
-        var candidateVolume = ExtractCandidateVolume(candidate);
-
         // Case 1: Neither side has volume
         if (workVolume is null && candidateVolume is null)
         {
             // Verified standalone candidate with no child decks scores 35
-            if (candidate.IsStandalone)
+            if (isCandidateStandalone)
             {
                 evidence.Add("Standalone deck with no volume markers");
                 return (ExactVolumeScore, false, null);
@@ -300,7 +388,9 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
                 return (ExactVolumeScore, false, null);
             }
 
-            var conflictReason = $"Explicit volume conflict: {workVolume.RawMarker} vs {candidateVolume.RawMarker}";
+            var conflictReason = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Explicit volume conflict: {workVolume.RawMarker} vs {candidateVolume.RawMarker}");
             evidence.Add(conflictReason);
             return (0, true, conflictReason);
         }
@@ -308,30 +398,6 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
         // Case 3: One side has volume and the other does not
         evidence.Add("Volume marker missing on one side");
         return (0, false, null);
-    }
-
-    private StructuredVolume? ExtractCandidateVolume(JitenMatchCandidate candidate)
-    {
-        // Check OriginalTitle, then EnglishTitle, then RomajiTitle
-        if (!string.IsNullOrWhiteSpace(candidate.OriginalTitle))
-        {
-            var parsed = _titleParser.Parse(candidate.OriginalTitle);
-            if (parsed.Volume is not null) return parsed.Volume;
-        }
-
-        if (!string.IsNullOrWhiteSpace(candidate.EnglishTitle))
-        {
-            var parsed = _titleParser.Parse(candidate.EnglishTitle);
-            if (parsed.Volume is not null) return parsed.Volume;
-        }
-
-        if (!string.IsNullOrWhiteSpace(candidate.RomajiTitle))
-        {
-            var parsed = _titleParser.Parse(candidate.RomajiTitle);
-            if (parsed.Volume is not null) return parsed.Volume;
-        }
-
-        return null;
     }
 
     private static int ScoreCharacterCount(
@@ -351,17 +417,17 @@ public sealed class JitenCandidateScorer : IJitenCandidateScorer
 
         if (diff <= 0.15)
         {
-            evidence.Add($"TTSU total differs by {diff:P1}");
+            evidence.Add(string.Create(CultureInfo.InvariantCulture, $"TTSU total differs by {diff:P1}"));
             return CloseTtsuCharScore;
         }
 
         if (diff <= 0.30)
         {
-            evidence.Add($"TTSU total differs by {diff:P1}");
+            evidence.Add(string.Create(CultureInfo.InvariantCulture, $"TTSU total differs by {diff:P1}"));
             return ModerateTtsuCharScore;
         }
 
-        evidence.Add($"TTSU total differs by {diff:P1} (exceeds 30%)");
+        evidence.Add(string.Create(CultureInfo.InvariantCulture, $"TTSU total differs by {diff:P1} (exceeds 30%)"));
         return 0;
     }
 }

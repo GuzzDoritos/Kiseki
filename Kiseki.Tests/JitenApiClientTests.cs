@@ -65,6 +65,48 @@ public class JitenApiClientTests
         Assert.All(handler.CancellationTokens, token => Assert.True(token.CanBeCanceled));
     }
 
+    [Fact]
+    public async Task GetDeckDetailAsync_ThrowsJitenHttpException_WithStatusCodeAndRetryAfter()
+    {
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
+            {
+                Content = new StringContent("rate limit exceeded")
+            };
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(15));
+            return response;
+        });
+
+        var client = new JitenApiClient(new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<JitenHttpException>(() => client.GetDeckDetailAsync(10));
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, ex.StatusCode);
+        Assert.Equal(TimeSpan.FromSeconds(15), ex.RetryAfter);
+
+        // Verify base HttpRequestException catch site compatibility
+        HttpRequestException httpEx = ex;
+        Assert.Equal(HttpStatusCode.TooManyRequests, httpEx.StatusCode);
+    }
+
+    [Fact]
+    public async Task SearchBooksAsync_ThrowsJitenHttpException_On5xxServerError()
+    {
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            {
+                Content = new StringContent("server error")
+            });
+
+        var client = new JitenApiClient(new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<JitenHttpException>(() => client.SearchBooksAsync("test"));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, ex.StatusCode);
+        Assert.Null(ex.RetryAfter);
+    }
+
     private sealed class StubHttpMessageHandler(
         Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler

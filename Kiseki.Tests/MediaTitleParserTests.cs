@@ -195,4 +195,22 @@ public sealed class MediaTitleParserTests
             CultureInfo.CurrentCulture = previousCulture;
         }
     }
+
+    [Theory]
+    [InlineData("Some Title 99999999999999999999999999999999999999999999999999")]
+    [InlineData("Some Title Vol. 99999999999999999999999999999999999999999999999999")]
+    [InlineData("Some Title 第99999999999999999999999999999999999999999999999999巻")]
+    [InlineData("Some Title 99999999999999999999999999999999999999999999999999.5")]
+    [InlineData("Some Title Vol. 99999999999999999999999999999999999999999999999999.5")]
+    [InlineData("Some Title Ep. 99999999999999999999999999999999999999999999999999")]
+    [InlineData("Some Title 2年生編 99999999999999999999999999999999999999999999999999")]
+    public void Parse_OversizedIntegerAndDecimalMarkersNeverThrowAndRemainUnparsed(string rawTitle)
+    {
+        var result = _parser.Parse(rawTitle);
+
+        Assert.NotNull(result);
+        Assert.Null(result.Volume);
+        Assert.False(result.HasVolume);
+        Assert.Equal(rawTitle, result.BaseTitle);
+    }
 }

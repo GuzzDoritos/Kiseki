@@ -89,8 +89,8 @@ public sealed record StructuredVolume
 
     public string FormatForEvidence() => Kind switch
     {
-        VolumeKind.Standard => $"Volume {Number}",
-        VolumeKind.Fractional => $"Volume {Number}",
+        VolumeKind.Standard => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Volume {Number}"),
+        VolumeKind.Fractional => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Volume {Number}"),
         VolumeKind.Position => Position switch
         {
             PositionMarker.Upper => "Volume 上",
@@ -98,7 +98,9 @@ public sealed record StructuredVolume
             PositionMarker.Lower => "Volume 下",
             _ => "Volume Position"
         },
-        VolumeKind.Special => Number.HasValue ? $"{SpecialTag} {Number}" : $"{SpecialTag}",
+        VolumeKind.Special => Number.HasValue
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{SpecialTag} {Number}")
+            : $"{SpecialTag}",
         _ => RawMarker
     };
 }

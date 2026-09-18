@@ -1,3 +1,4 @@
+using Kiseki.Core.DTOs;
 using Kiseki.Core.Models;
 
 namespace Kiseki.Core.Services;
@@ -41,6 +42,30 @@ public sealed class JitenSelectionResolver : IJitenSelectionResolver
                 "Jiten could not verify the selected deck.");
         }
 
+        return Resolve(detail, parentDeckId, subdeckId);
+    }
+
+    public JitenSelectionResult Resolve(
+        JitenDeckDetailDTO detail,
+        int parentDeckId,
+        int? subdeckId = null)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        if (parentDeckId <= 0)
+        {
+            return JitenSelectionResult.Failed(
+                JitenSelectionStatus.InvalidDeckId,
+                "Parent deck ID must be greater than zero.");
+        }
+
+        if (subdeckId.HasValue && subdeckId.Value <= 0)
+        {
+            return JitenSelectionResult.Failed(
+                JitenSelectionStatus.InvalidDeckId,
+                "Subdeck ID must be greater than zero.");
+        }
+
         var parent = new[] { detail.MainDeck, detail.ParentDeck }
             .FirstOrDefault(deck => deck?.DeckId == parentDeckId);
 
@@ -63,6 +88,20 @@ public sealed class JitenSelectionResolver : IJitenSelectionResolver
                     "The selected Jiten subdeck no longer exists.");
             }
 
+            if (subdeck.DeckId <= 0)
+            {
+                return JitenSelectionResult.Failed(
+                    JitenSelectionStatus.InvalidDeckId,
+                    "Subdeck ID must be greater than zero.");
+            }
+
+            if (subdeck.CharacterCount < 0)
+            {
+                return JitenSelectionResult.Failed(
+                    JitenSelectionStatus.InvalidCharacterCount,
+                    "Character count cannot be negative.");
+            }
+
             return JitenSelectionResult.Succeeded(
                 JitenMediaSelection.FromSubdeck(parent, subdeck));
         }
@@ -73,6 +112,13 @@ public sealed class JitenSelectionResolver : IJitenSelectionResolver
             return JitenSelectionResult.Failed(
                 JitenSelectionStatus.ParentHasChildren,
                 "Cannot link a series deck directly when subdecks exist. Choose a specific subdeck.");
+        }
+
+        if (parent.CharacterCount < 0)
+        {
+            return JitenSelectionResult.Failed(
+                JitenSelectionStatus.InvalidCharacterCount,
+                "Character count cannot be negative.");
         }
 
         return JitenSelectionResult.Succeeded(
