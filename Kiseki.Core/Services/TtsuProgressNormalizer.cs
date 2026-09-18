@@ -30,6 +30,19 @@ public static class TtsuProgressNormalizer
             .ToList();
     }
 
+    public static int? ResolveAuthoritativeTotal(TtsuBookContainer book)
+    {
+        var eligibleTotals = Normalize(book)
+            .Where(snapshot =>
+                snapshot.InferenceKind is TtsuTotalInferenceKind.ExactRatio or TtsuTotalInferenceKind.CompletionAdjusted &&
+                snapshot.InferredTotalCharacters is > 0)
+            .Select(snapshot => snapshot.InferredTotalCharacters!.Value)
+            .Distinct()
+            .ToList();
+
+        return eligibleTotals.Count == 1 ? eligibleTotals[0] : null;
+    }
+
     public static TtsuProgressSnapshot Normalize(TtsuProgressDTO progress)
     {
         ArgumentNullException.ThrowIfNull(progress);

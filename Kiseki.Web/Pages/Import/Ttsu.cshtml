@@ -31,6 +31,13 @@
             <input class="visually-hidden" asp-for="FolderFiles" type="file" webkitdirectory multiple data-ttsu-folder-input />
             <label class="btn btn-outline-secondary" asp-for="FolderFiles">Choose folder</label>
         </div>
+        <div class="form-check ttsu-auto-match-option">
+            <input class="form-check-input" type="checkbox" asp-for="AutoMatchMetadata" data-ttsu-auto-match />
+            <label class="form-check-label" asp-for="AutoMatchMetadata">
+                Auto-match metadata with Jiten
+            </label>
+            <span class="form-text d-block">Search Jiten.moe for matching titles and volume numbers to suggest book covers and character counts.</span>
+        </div>
         <div class="form-actions"><button class="btn btn-primary" type="submit">Preview books</button></div>
     </form>
 </section>
@@ -51,7 +58,14 @@
                     <input type="hidden" asp-for="Selections[index].ReviewToken" />
                     <div class="ttsu-book-select"><input class="form-check-input" asp-for="Selections[index].Selected" aria-label="Select @book.Title" /></div>
                     <div class="ttsu-book-copy">
-                        <h3>@book.Title</h3><p>@book.FolderHint</p><span class="import-match">@book.MatchReason</span>
+                        <h3>@book.Title</h3><p>@book.FolderHint</p>
+                        <div class="ttsu-match-badges">
+                            <span class="import-match">@book.MatchReason</span>
+                            @if (book.Enrichment is not null)
+                            {
+                                <span class="import-badge import-badge-@book.Enrichment.Badge.ToString().ToLowerInvariant()">@book.Enrichment.BadgeLabel</span>
+                            }
+                        </div>
                     </div>
                     <div class="ttsu-import-mode">
                         <label asp-for="Selections[index].Mode">Import behavior</label>
@@ -116,6 +130,99 @@
                         <p>Reading time: @TtsuBookPreviewViewModel.FormatDuration(plan.CurrentMinutes * 60) → @TtsuBookPreviewViewModel.FormatDuration(plan.ResultMinutes * 60)</p>
                         @if (!plan.CanApply) { <p>Totals are provisional until all selected conflicts are resolved.</p> }
                     </div>
+                    @if (book.Enrichment is not null)
+                    {
+                        var enrichment = book.Enrichment;
+                        <div class="ttsu-enrichment-section">
+                            <div class="ttsu-enrichment-header">
+                                <strong>Metadata suggestions</strong>
+                                <span class="import-badge import-badge-@enrichment.Badge.ToString().ToLowerInvariant()">@enrichment.BadgeLabel</span>
+                            </div>
+                            @if (!enrichment.IsMetadataApplicationEligible && enrichment.IneligibilityReason is not null)
+                            {
+                                <p class="import-warnings">@enrichment.IneligibilityReason</p>
+                            }
+                            @if (enrichment.Warnings.Count > 0)
+                            {
+                                <ul class="enrichment-warnings">
+                                    @foreach (var warning in enrichment.Warnings)
+                                    {
+                                        <li>@warning</li>
+                                    }
+                                </ul>
+                            }
+                            @if (enrichment.Evidence.Count > 0)
+                            {
+                                <p class="enrichment-evidence">Evidence: @string.Join(" • ", enrichment.Evidence)</p>
+                            }
+                            <div class="ttsu-candidate-choices">
+                                <div class="form-check ttsu-candidate-option">
+                                    <input class="form-check-input" type="radio"
+                                           name="Selections[@index].CandidateKey"
+                                           id="candidate_none_@index"
+                                           value=""
+                                           @(enrichment.SelectedCandidateKey == null ? "checked" : "") />
+                                    <label class="form-check-label" for="candidate_none_@index">
+                                        Import without Jiten metadata
+                                    </label>
+                                </div>
+                                @foreach (var candidate in enrichment.Candidates)
+                                {
+                                    var inputId = $"candidate_{candidate.Key}_{index}";
+                                    var isSelected = enrichment.SelectedCandidateKey == candidate.Key;
+                                    <div class="form-check ttsu-candidate-option candidate-card @(isSelected ? "candidate-selected" : "")">
+                                        <input class="form-check-input" type="radio"
+                                               name="Selections[@index].CandidateKey"
+                                               id="@inputId"
+                                               value="@candidate.Key"
+                                               @(isSelected ? "checked" : "")
+                                               @(enrichment.IsMetadataApplicationEligible && candidate.IsSelectable ? "" : "disabled") />
+                                        <label class="form-check-label candidate-label" for="@inputId">
+                                            <div class="candidate-thumb-frame @(string.IsNullOrWhiteSpace(candidate.CoverUrl) ? "" : "has-image")" data-cover-frame>
+                                                @if (!string.IsNullOrWhiteSpace(candidate.CoverUrl))
+                                                {
+                                                    <img src="@candidate.CoverUrl" alt="Cover for @candidate.DisplayTitle" loading="lazy" referrerpolicy="no-referrer" data-cover-image class="candidate-thumb" />
+                                                    <span class="candidate-thumb-placeholder" data-cover-fallback hidden aria-hidden="true">本</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="candidate-thumb-placeholder" data-cover-fallback aria-hidden="true">本</span>
+                                                }
+                                            </div>
+                                            <div class="candidate-info">
+                                                <div class="candidate-title-row">
+                                                    <span class="candidate-title">@candidate.DisplayTitle</span>
+                                                    @if (candidate.IsTopCandidate)
+                                                    {
+                                                        <span class="badge-top-candidate">Top match</span>
+                                                    }
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(candidate.RomajiTitle) && candidate.RomajiTitle != candidate.DisplayTitle)
+                                                {
+                                                    <span class="candidate-subtitle">@candidate.RomajiTitle</span>
+                                                }
+                                                <div class="candidate-meta">
+                                                    <span>@(candidate.SubdeckId.HasValue ? $"Subdeck {candidate.SubdeckId} (Deck {candidate.DeckId})" : $"Deck {candidate.DeckId}")</span>
+                                                    <span>@candidate.CharacterCount.ToString("N0") characters</span>
+                                                    <span>@candidate.Score pts</span>
+                                                     <span class="candidate-cover-label">@candidate.CoverEvidenceLabel</span>
+                                                 </div>
+                                                 @if (candidate.Evidence.Count > 0)
+                                                 {
+                                                     <ul class="candidate-evidence">
+                                                         @foreach (var evidence in candidate.Evidence)
+                                                         {
+                                                             <li>@evidence</li>
+                                                         }
+                                                     </ul>
+                                                 }
+                                             </div>
+                                         </label>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
                     <details class="ttsu-entry-details" open="@(plan.Days.Any(day => day.ReviewReason is not null))">
                         <summary>Review daily changes</summary>
                         <div class="ttsu-entry-table-wrap">

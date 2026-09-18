@@ -1,9 +1,49 @@
 using Kiseki.Core.Models;
+using Kiseki.Core.Models.Metadata;
 
 namespace Kiseki.Web.Models;
 
-public sealed record TtsuBookPreviewViewModel(Guid BookKey, string Title, string? FolderHint,
-    string MatchReason, TtsuImportPlan Plan)
+public enum TtsuEnrichmentBadge
+{
+    AutoMatched,
+    NeedsReview,
+    NoSafeMatch,
+    JitenUnavailable
+}
+
+public sealed record TtsuCandidateChoiceViewModel(
+    Guid Key,
+    int DeckId,
+    int? SubdeckId,
+    string DisplayTitle,
+    string RomajiTitle,
+    string EnglishTitle,
+    int CharacterCount,
+    int Score,
+    string? CoverUrl,
+    JitenCoverEvidence CoverEvidence,
+    string CoverEvidenceLabel,
+    IReadOnlyList<string> Evidence,
+    bool IsTopCandidate,
+    bool IsSelectable);
+
+public sealed record TtsuBookEnrichmentViewModel(
+    TtsuEnrichmentBadge Badge,
+    string BadgeLabel,
+    IReadOnlyList<string> Evidence,
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<TtsuCandidateChoiceViewModel> Candidates,
+    Guid? SelectedCandidateKey,
+    bool IsMetadataApplicationEligible,
+    string? IneligibilityReason);
+
+public sealed record TtsuBookPreviewViewModel(
+    Guid BookKey,
+    string Title,
+    string? FolderHint,
+    string MatchReason,
+    TtsuImportPlan Plan,
+    TtsuBookEnrichmentViewModel? Enrichment = null)
 {
     public Guid? ExistingMediaWorkId => Plan.TargetId;
     public bool ExistsInLibrary => ExistingMediaWorkId.HasValue;
@@ -18,6 +58,7 @@ public sealed record TtsuBookPreviewViewModel(Guid BookKey, string Title, string
 }
 
 public sealed record TtsuOrphanViewModel(Guid Id, DateOnly Date, int Characters, double Minutes);
+
 public sealed class TtsuBookSelectionInput
 {
     public Guid BookKey { get; set; }
@@ -28,10 +69,13 @@ public sealed class TtsuBookSelectionInput
     public List<TtsuDayResolutionInput> Days { get; set; } = [];
     public List<Guid> OrphanLogIds { get; set; } = [];
     public string ProgressChoice { get; set; } = string.Empty;
+    public Guid? CandidateKey { get; set; }
 }
+
 public sealed class TtsuDayResolutionInput
 {
     public DateOnly Date { get; set; }
     public string Choice { get; set; } = string.Empty;
 }
+
 public enum TtsuImportMode { Merge, Create }

@@ -1,5 +1,6 @@
 using Kiseki.Core;
 using Kiseki.Core.Services;
+using Kiseki.Core.Services.Metadata;
 using Kiseki.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -97,6 +98,9 @@ builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<IJitenSelectionResolver, JitenSelectionResolver>();
+builder.Services.AddSingleton<IMediaTitleParser, MediaTitleParser>();
+builder.Services.AddSingleton<IJitenCandidateScorer, JitenCandidateScorer>();
+builder.Services.AddScoped<IJitenMatchService, JitenMatchService>();
 builder.Services.AddSingleton<TtsuDataLoader>();
 builder.Services.AddSingleton<ITtsuImportBatchStore, TtsuImportBatchStore>();
 builder.Services.AddSingleton<IAuthService, SinglePasswordAuthService>();
