@@ -108,6 +108,18 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                     if (request.OrphanLogIds?.Count > 0)
                         work.Logs.AddRange(await context.ImmersionLogs.Where(x => request.OrphanLogIds.Contains(x.Id)).ToListAsync(cancellationToken));
 
+                    var hasFolderCover = !string.IsNullOrWhiteSpace(request.Book.CoverImage);
+                    if (hasFolderCover && (isNewWork || !work.IsCoverProtected))
+                    {
+                        try
+                        {
+                            work.ApplyTtsuCover(request.Book.CoverImage);
+                        }
+                        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                        {
+                        }
+                    }
+
                     if (request.Metadata is not null)
                     {
                         if (request.Metadata.Selection is { } selection)
@@ -117,7 +129,7 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                                 selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
                                 receipt.MetadataLinks++;
 
-                                if (request.Metadata.EffectiveCover is { } coverSelection)
+                                if (!hasFolderCover && request.Metadata.EffectiveCover is { } coverSelection)
                                 {
                                     try
                                     {
@@ -141,7 +153,7 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                                 selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
                                 receipt.MetadataLinks++;
 
-                                if (request.Metadata.EffectiveCover is { } coverSelection)
+                                if (!hasFolderCover && request.Metadata.EffectiveCover is { } coverSelection)
                                 {
                                     try
                                     {

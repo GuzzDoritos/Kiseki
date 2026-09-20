@@ -8,6 +8,7 @@ public enum MediaCoverSource
     JitenParentFallback = 3,
     UserOverride = 4,
     GoogleBooks = 5,
-    OpenLibrary = 6
+    OpenLibrary = 6,
+    Ttsu = 7
 }
 

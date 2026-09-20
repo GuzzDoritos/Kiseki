@@ -18,6 +18,16 @@ public static class TtsuBookImporter
         ArgumentNullException.ThrowIfNull(work);
         var plan = TtsuMergePlanner.Plan(work, book);
         if (!plan.CanApply) throw new TtsuImportReviewRequiredException("Review conflicting statistics before merging.");
+        if (!string.IsNullOrWhiteSpace(book.CoverImage) && !work.IsCoverProtected)
+        {
+            try
+            {
+                work.ApplyTtsuCover(book.CoverImage);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+            }
+        }
         if (plan.Progress.Accepted?.InferredTotalCharacters is int inferredTotal)
         {
             work.UpdateTtsuCharacterCount(inferredTotal);

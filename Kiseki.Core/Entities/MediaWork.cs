@@ -50,7 +50,7 @@ public class MediaWork
     public string? CoverProviderItemId { get; private set; }
 
     public bool HasCover => !string.IsNullOrWhiteSpace(CoverUrl);
-    public bool IsCoverProtected => CoverSource is MediaCoverSource.LegacyUnknown or MediaCoverSource.UserOverride;
+    public bool IsCoverProtected => CoverSource is MediaCoverSource.LegacyUnknown or MediaCoverSource.UserOverride or MediaCoverSource.Ttsu;
 
     // Character Counts
     public int? JitenCharacterCount { get; set; }
@@ -146,6 +146,29 @@ public class MediaWork
 
         CoverUrl = normalized;
         CoverSource = MediaCoverSource.UserOverride;
+        CoverProviderItemId = null;
+    }
+
+    public void ApplyTtsuCover(string coverUrl)
+    {
+        if (IsCoverProtected && CoverSource is not MediaCoverSource.Ttsu)
+        {
+            throw new InvalidOperationException("Cannot overwrite a protected cover.");
+        }
+
+        if (string.IsNullOrWhiteSpace(coverUrl))
+        {
+            throw new ArgumentException("Cover image URL cannot be empty.", nameof(coverUrl));
+        }
+
+        var normalized = NormalizeCoverUrl(coverUrl);
+        if (normalized is null)
+        {
+            throw new ArgumentException("Cover image URL must be a valid HTTPS or local URL.", nameof(coverUrl));
+        }
+
+        CoverUrl = normalized;
+        CoverSource = MediaCoverSource.Ttsu;
         CoverProviderItemId = null;
     }
 
@@ -313,6 +336,11 @@ public class MediaWork
         }
 
         var normalized = coverUrl.Trim();
+        if (normalized.Length <= MaxCoverUrlLength && normalized.StartsWith('/'))
+        {
+            return normalized;
+        }
+
         return normalized.Length <= MaxCoverUrlLength &&
                Uri.TryCreate(normalized, UriKind.Absolute, out var uri) &&
                uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)

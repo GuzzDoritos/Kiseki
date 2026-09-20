@@ -42,6 +42,7 @@ public static class TtsuStatisticsNormalizer
                 Title = group.First().Title,
                 FolderHint = group.Key.FolderHint,
                 Entries = group.SelectMany(book => book.Entries).ToList(),
-                ProgressEntries = group.SelectMany(book => book.ProgressEntries).ToList()
+                ProgressEntries = group.SelectMany(book => book.ProgressEntries).ToList(),
+                CoverImage = group.Select(book => book.CoverImage).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)) ?? string.Empty
             }).ToList();
 }

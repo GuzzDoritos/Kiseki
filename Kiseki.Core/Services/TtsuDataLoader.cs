@@ -8,6 +8,8 @@ public sealed class TtsuDataLoader
     public const string StatisticsFilePrefix = "statistics";
     public const string ProgressFilePrefix = "progress_";
 
+    public const string CoverFilePrefix = "cover_";
+
     public async Task<IReadOnlyList<TtsuBookContainer>> LoadDirectoryAsync(
         string rootPath,
         CancellationToken cancellationToken = default)
@@ -35,12 +37,19 @@ public sealed class TtsuDataLoader
 
             var sourceFiles = Directory
                 .EnumerateFiles(bookDirectory)
-                .Where(path => IsStatisticsFileName(path) || IsProgressFileName(path))
+                .Where(path => IsStatisticsFileName(path) || IsProgressFileName(path) || IsCoverFilename(path))
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
             var folderBooks = new List<TtsuBookContainer>();
             var progressEntries = new List<TtsuProgressDTO>();
+            string? coverFilePath = null;
             foreach (var sourceFile in sourceFiles)
             {
+                if (IsCoverFilename(sourceFile))
+                {
+                    coverFilePath ??= sourceFile;
+                    continue;
+                }
+
                 await using var stream = new FileStream(
                     sourceFile,
                     FileMode.Open,
@@ -82,6 +91,10 @@ public sealed class TtsuDataLoader
             if (combinedFolderBooks.Count == 1)
             {
                 combinedFolderBooks[0].ProgressEntries.AddRange(progressEntries);
+                if (coverFilePath is not null)
+                {
+                    combinedFolderBooks[0].CoverImage = coverFilePath;
+                }
             }
             books.AddRange(combinedFolderBooks);
         }
@@ -165,6 +178,20 @@ public sealed class TtsuDataLoader
         var fileName = normalizedPath[(normalizedPath.LastIndexOf('/') + 1)..];
         return fileName.StartsWith(ProgressFilePrefix, StringComparison.OrdinalIgnoreCase) &&
             fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsCoverFilename(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var normalizedPath = path.Replace('\\', '/');
+        var fileName = normalizedPath[(normalizedPath.LastIndexOf('/') + 1)..];
+        return fileName.StartsWith(CoverFilePrefix, StringComparison.OrdinalIgnoreCase) &&
+               (fileName.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<TtsuProgressDTO> ParseProgressAsync(

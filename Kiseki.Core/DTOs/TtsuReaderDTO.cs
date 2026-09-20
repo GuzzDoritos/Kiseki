@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace Kiseki.Core.DTOs;
 
@@ -26,4 +26,11 @@ public sealed class TtsuBookContainer
     public string? FolderHint { get; set; }
     public List<TtsuReaderDTO> Entries { get; set; } = [];
     public List<TtsuProgressDTO> ProgressEntries { get; set; } = [];
+
+    public string CoverImage { get; set; } = string.Empty;
+    public string coverImage
+    {
+        get => CoverImage;
+        set => CoverImage = value;
+    }
 }
