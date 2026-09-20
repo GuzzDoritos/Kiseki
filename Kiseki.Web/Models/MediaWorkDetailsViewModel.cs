@@ -59,6 +59,7 @@ public sealed record MediaWorkDetailsViewModel(
         MediaCoverSource.JitenSpecific => "Jiten volume cover",
         MediaCoverSource.JitenParentFallback => "Jiten series fallback",
         MediaCoverSource.GoogleBooks => "Google Books volume cover",
+        MediaCoverSource.Ttsu => "TTSU cover",
         _ => "No cover"
     };
 

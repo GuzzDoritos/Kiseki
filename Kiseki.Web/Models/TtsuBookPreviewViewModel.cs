@@ -61,7 +61,8 @@ public sealed record TtsuBookPreviewViewModel(
     string? FolderHint,
     string MatchReason,
     TtsuImportPlan Plan,
-    TtsuBookEnrichmentViewModel? Enrichment = null)
+    TtsuBookEnrichmentViewModel? Enrichment = null,
+    string? CoverUrl = null)
 {
     public Guid? ExistingMediaWorkId => Plan.TargetId;
     public bool ExistsInLibrary => ExistingMediaWorkId.HasValue;

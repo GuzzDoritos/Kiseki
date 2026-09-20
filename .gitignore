@@ -367,3 +367,7 @@ FodyWeavers.xsd
 .env.local
 .env.*.local
 !.env.example
+
+# User uploaded cover files
+Kiseki.Web/wwwroot/covers/*
+!Kiseki.Web/wwwroot/covers/.gitkeep

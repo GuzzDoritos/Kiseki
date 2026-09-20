@@ -27,7 +27,7 @@
     <form method="post" enctype="multipart/form-data" asp-page-handler="Preview">
         <div class="ttsu-folder-picker">
             <svg class="ttsu-upload-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3.5 7.5h6l1.8 2h9.2v8.75A2.25 2.25 0 0 1 18.25 20H5.75a2.25 2.25 0 0 1-2.25-2.25V7.5Z"></path><path d="M12 16V6m-3 3 3-3 3 3"></path></svg>
-            <div class="ttsu-picker-copy"><strong>Select your TTSU data folder</strong><span data-ttsu-selection-summary>Only statistics files will be processed.</span></div>
+            <div class="ttsu-picker-copy"><strong>Select your TTSU data folder</strong><span data-ttsu-selection-summary>Statistics, progress, and cover files will be processed.</span></div>
             <input class="visually-hidden" asp-for="FolderFiles" type="file" webkitdirectory multiple data-ttsu-folder-input />
             <label class="btn btn-outline-secondary" asp-for="FolderFiles">Choose folder</label>
         </div>
@@ -103,13 +103,27 @@
                     <input type="hidden" asp-for="Selections[index].ReviewToken" />
                     <div class="ttsu-book-select"><input class="form-check-input" asp-for="Selections[index].Selected" aria-label="Select @book.Title" /></div>
                     <div class="ttsu-book-copy">
-                        <h3>@book.Title</h3><p>@book.FolderHint</p>
-                        <div class="ttsu-match-badges">
-                            <span class="import-match">@book.MatchReason</span>
-                            @if (book.Enrichment is not null)
+                        <div style="display: flex; gap: 12px; align-items: flex-start;">
+                            @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
                             {
-                                <span class="import-badge import-badge-@book.Enrichment.Badge.ToString().ToLowerInvariant()">@book.Enrichment.BadgeLabel</span>
+                                <div class="candidate-thumb-frame has-image" style="width: 44px; height: 62px; flex-shrink: 0;">
+                                    <img src="@book.CoverUrl" alt="Cover for @book.Title" loading="lazy" class="candidate-thumb" />
+                                </div>
                             }
+                            <div style="min-width: 0; flex: 1;">
+                                <h3>@book.Title</h3><p>@book.FolderHint</p>
+                                <div class="ttsu-match-badges">
+                                    <span class="import-match">@book.MatchReason</span>
+                                    @if (!string.IsNullOrWhiteSpace(book.CoverUrl))
+                                    {
+                                        <span class="import-badge import-badge-automatched">Folder cover</span>
+                                    }
+                                    @if (book.Enrichment is not null)
+                                    {
+                                        <span class="import-badge import-badge-@book.Enrichment.Badge.ToString().ToLowerInvariant()">@book.Enrichment.BadgeLabel</span>
+                                    }
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="ttsu-import-mode">

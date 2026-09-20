@@ -10,6 +10,7 @@ using Kiseki.Core.Services.Metadata;
 using Kiseki.Core.Services.GoogleBooks;
 using Kiseki.Web.Models;
 using Kiseki.Web.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -26,7 +27,8 @@ public sealed class TtsuModel(
     IJitenMatchService matchService,
     IJitenSelectionResolver selectionResolver,
     IGoogleBooksCoverService? googleBooksCoverService = null,
-    ILogger<TtsuModel>? logger = null) : PageModel
+    ILogger<TtsuModel>? logger = null,
+    IWebHostEnvironment? environment = null) : PageModel
 {
     private const long MaxRequestBytes = 64 * 1024 * 1024;
     private static readonly TimeSpan PerBookJitenBudget = TimeSpan.FromSeconds(6);
@@ -49,18 +51,36 @@ public sealed class TtsuModel(
     public bool IsGoogleBooksConfigured => googleBooksCoverService?.IsConfigured ?? false;
     public void OnGet() { }
 
+    private string GetCoversDirectory()
+    {
+        var webRoot = environment?.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot) && environment?.ContentRootPath != null)
+        {
+            webRoot = Path.Combine(environment.ContentRootPath, "wwwroot");
+        }
+        webRoot ??= Path.Combine(AppContext.BaseDirectory, "wwwroot");
+        var dir = Path.Combine(webRoot, "covers");
+        if (!Directory.Exists(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+        return dir;
+    }
+
     public async Task<IActionResult> OnPostPreviewAsync(CancellationToken cancellationToken)
     {
         var files = FolderFiles.Where(file => TtsuDataLoader.IsStatisticsFileName(file.FileName) ||
-            TtsuDataLoader.IsProgressFileName(file.FileName)).ToList();
+            TtsuDataLoader.IsProgressFileName(file.FileName) ||
+            TtsuDataLoader.IsCoverFilename(file.FileName)).ToList();
         var statisticsFileCount = files.Count(file => TtsuDataLoader.IsStatisticsFileName(file.FileName));
-        if (statisticsFileCount == 0 || files.Count > 250)
+        if (statisticsFileCount == 0 || statisticsFileCount > 250 || files.Count > 1000)
         {
-            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with statistics files and no more than 250 statistics/progress files.");
+            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with statistics files and no more than 250 books.");
             return Page();
         }
         var parsed = new List<TtsuBookContainer>();
         var progressByFolder = new Dictionary<string, List<TtsuProgressDTO>>(StringComparer.OrdinalIgnoreCase);
+        var coversByFolder = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -77,7 +97,26 @@ public sealed class TtsuModel(
                 var folder = parts.Length > 1 ? parts[^2] : null;
                 // Ignore the chosen root directory, which changes between exports/machines.
                 var folderHint = parts.Length > 2 ? string.Join('/', parts.Skip(1).SkipLast(1)) : folder;
-                if (TtsuDataLoader.IsProgressFileName(path))
+                if (TtsuDataLoader.IsCoverFilename(path))
+                {
+                    var extension = Path.GetExtension(path);
+                    if (string.IsNullOrWhiteSpace(extension))
+                    {
+                        extension = ".jpeg";
+                    }
+                    var fileName = $"cover_{Guid.NewGuid():N}{extension}";
+                    var targetPath = Path.Combine(GetCoversDirectory(), fileName);
+                    await using var fileStream = new FileStream(
+                        targetPath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None,
+                        bufferSize: 4096,
+                        useAsync: true);
+                    await stream.CopyToAsync(fileStream, cancellationToken);
+                    coversByFolder.TryAdd(folderHint ?? string.Empty, $"/covers/{fileName}");
+                }
+                else if (TtsuDataLoader.IsProgressFileName(path))
                 {
                     var progress = await dataLoader.ParseProgressAsync(stream, path, cancellationToken);
                     progressByFolder.TryAdd(folderHint ?? string.Empty, []);
@@ -114,6 +153,21 @@ public sealed class TtsuModel(
                 Warnings.Add(matches.Count == 0
                     ? $"Progress in '{folderHint}' was skipped because no statistics file identified its book."
                     : $"Progress in '{folderHint}' was skipped because multiple book titles made it ambiguous.");
+            }
+        }
+        foreach (var (folderHint, coverUrl) in coversByFolder)
+        {
+            var matches = combined.Where(book => string.Equals(book.FolderHint ?? string.Empty,
+                folderHint, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 1)
+            {
+                matches[0].CoverImage = coverUrl;
+            }
+            else
+            {
+                Warnings.Add(matches.Count == 0
+                    ? $"Cover in '{folderHint}' was skipped because no statistics file identified its book."
+                    : $"Cover in '{folderHint}' was skipped because multiple book titles made it ambiguous.");
             }
         }
         var batch = batchStore.Store(combined);
@@ -424,8 +478,9 @@ public sealed class TtsuModel(
                         freshSelection = null;
                     }
 
+                    var hasFolderCover = !string.IsNullOrWhiteSpace(book.Book.CoverImage);
                     ExternalCoverSelection? freshCover = null;
-                    if (candidate is not null && googleBooksCoverService is not null)
+                    if (!hasFolderCover && candidate is not null && googleBooksCoverService is not null)
                     {
                         CoverEditionOption? chosenOption = null;
                         var isExplicitNoCover = string.Equals(review.SelectedCoverKey, "none", StringComparison.OrdinalIgnoreCase);
@@ -724,16 +779,23 @@ public sealed class TtsuModel(
                     var selectedOption = c.CoverOptions?.FirstOrDefault(o => o.SelectionKey == input.SelectedCoverKey)
                                          ?? c.CoverOptions?.FirstOrDefault();
 
-                    var hasExternal = selectedOption is not null || c.GoogleCover is not null;
+                    var hasFolderCover = !string.IsNullOrWhiteSpace(item.Book.CoverImage);
+                    var hasExternal = !hasFolderCover && (selectedOption is not null || c.GoogleCover is not null);
                     var provider = selectedOption?.Provider ?? (c.GoogleCover?.Provider ?? ExternalCoverProvider.GoogleBooks);
                     var isOl = provider == ExternalCoverProvider.OpenLibrary;
-                    var coverUrl = selectedOption?.CoverUrl ?? (c.GoogleCover is not null ? c.GoogleCover.CoverUrl : c.Candidate.CoverUrl);
-                    var attributionLink = selectedOption?.AttributionUrl ?? c.GoogleCover?.AttributionLink;
-                    var volumeId = selectedOption?.ProviderItemId ?? c.GoogleCover?.VolumeId;
-                    var isLowRes = selectedOption?.IsLowResolution ?? (c.GoogleCover?.IsLowResolution ?? false);
+                    var coverUrl = hasFolderCover
+                        ? item.Book.CoverImage
+                        : (selectedOption?.CoverUrl ?? (c.GoogleCover is not null ? c.GoogleCover.CoverUrl : c.Candidate.CoverUrl));
+                    var attributionLink = hasFolderCover ? null : (selectedOption?.AttributionUrl ?? c.GoogleCover?.AttributionLink);
+                    var volumeId = hasFolderCover ? null : (selectedOption?.ProviderItemId ?? c.GoogleCover?.VolumeId);
+                    var isLowRes = !hasFolderCover && (selectedOption?.IsLowResolution ?? (c.GoogleCover?.IsLowResolution ?? false));
 
                     string coverLabel;
-                    if (selectedOption is not null)
+                    if (hasFolderCover)
+                    {
+                        coverLabel = "TTSU folder cover";
+                    }
+                    else if (selectedOption is not null)
                     {
                         coverLabel = isOl ? "Open Library cover" : "Google Books volume cover";
                     }
@@ -820,7 +882,14 @@ public sealed class TtsuModel(
                     item.Enrichment.FilteredIncompatibleCount);
             }
 
-            books.Add(new(item.Key, item.Book.Title, item.Book.FolderHint, match.Reason, plan, enrichmentVm));
+            books.Add(new(
+                item.Key,
+                item.Book.Title,
+                item.Book.FolderHint,
+                match.Reason,
+                plan,
+                enrichmentVm,
+                string.IsNullOrWhiteSpace(item.Book.CoverImage) ? null : item.Book.CoverImage));
             Selections.Add(input);
         }
         Books = books;
@@ -1174,6 +1243,11 @@ public sealed class TtsuModel(
         TtsuImportBatchBook book,
         CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(book.Book.CoverImage))
+        {
+            return false;
+        }
+
         var match = await _imports.MatchAsync(book.Book, cancellationToken);
         if (match.WorkId is not Guid targetId) return true;
 

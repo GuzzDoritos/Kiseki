@@ -11,22 +11,44 @@ export function initTtsuFolderInput() {
 
     ttsuFolderInput.addEventListener('change', () => {
         const selectedFiles = Array.from(ttsuFolderInput.files ?? []);
+        const isCover = name => name.startsWith('cover_') && (name.endsWith('.jpeg') || name.endsWith('.jpg'));
         const sourceFiles = selectedFiles.filter(file => {
             const name = file.name.toLowerCase();
             return name.startsWith('statistics') ||
-                (name.startsWith('progress_') && name.endsWith('.json'));
+                (name.startsWith('progress_') && name.endsWith('.json')) ||
+                isCover(name);
         });
         const statisticsFiles = sourceFiles.filter(file =>
             file.name.toLowerCase().startsWith('statistics'));
+        const progressFiles = sourceFiles.filter(file => {
+            const name = file.name.toLowerCase();
+            return name.startsWith('progress_') && name.endsWith('.json');
+        });
+        const coverFiles = sourceFiles.filter(file =>
+            isCover(file.name.toLowerCase()));
 
         if (selectionSummary) {
             if (statisticsFiles.length === 0) {
                 selectionSummary.textContent = 'No statistics files were found in that folder.';
             } else {
-                const suffix = statisticsFiles.length === 1 ? 'file' : 'files';
-                const progressCount = sourceFiles.length - statisticsFiles.length;
-                const progressSummary = progressCount === 0 ? '' : ` and ${progressCount} progress ${progressCount === 1 ? 'file' : 'files'}`;
-                selectionSummary.textContent = `${statisticsFiles.length} statistics ${suffix}${progressSummary} ready to preview.`;
+                const parts = [
+                    `${statisticsFiles.length} statistics ${statisticsFiles.length === 1 ? 'file' : 'files'}`
+                ];
+                if (progressFiles.length > 0) {
+                    parts.push(`${progressFiles.length} progress ${progressFiles.length === 1 ? 'file' : 'files'}`);
+                }
+                if (coverFiles.length > 0) {
+                    parts.push(`${coverFiles.length} cover ${coverFiles.length === 1 ? 'file' : 'files'}`);
+                }
+                let summary;
+                if (parts.length === 1) {
+                    summary = parts[0];
+                } else if (parts.length === 2) {
+                    summary = `${parts[0]} and ${parts[1]}`;
+                } else {
+                    summary = `${parts[0]}, ${parts[1]}, and ${parts[2]}`;
+                }
+                selectionSummary.textContent = `${summary} ready to preview.`;
             }
         }
 
