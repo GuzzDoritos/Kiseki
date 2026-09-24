@@ -42,6 +42,7 @@ public sealed class TtsuModel(
     [BindProperty] public List<TtsuBookSelectionInput> Selections { get; set; } = [];
     public IReadOnlyList<TtsuBookPreviewViewModel> Books { get; private set; } = [];
     public IReadOnlyList<TtsuTarget> Targets { get; private set; } = [];
+    public IReadOnlyList<TtsuInstallmentTarget> InstallmentTargets { get; private set; } = [];
     public IReadOnlyList<TtsuOrphanViewModel> Orphans { get; private set; } = [];
     public List<string> Warnings { get; } = [];
     public bool HasPreview => BatchId != Guid.Empty && Books.Count > 0;
@@ -421,7 +422,8 @@ public sealed class TtsuModel(
                     !batch.Reviews.TryGetValue(input.ReviewToken, out var review) ||
                     review.BookKey != input.BookKey ||
                     review.CandidateKey != input.CandidateKey ||
-                    review.SelectedCoverKey != input.SelectedCoverKey)
+                    review.SelectedCoverKey != input.SelectedCoverKey ||
+                    !SubmittedChoiceMatchesReview(input, review.TargetChoice))
                 {
                     throw new TtsuImportReviewRequiredException("The selection is invalid. Review the import again.");
                 }
@@ -435,9 +437,6 @@ public sealed class TtsuModel(
                         throw new TtsuImportReviewRequiredException("The metadata selection is invalid. Review the import again.");
                     }
                 }
-
-                if (input.Mode == TtsuImportMode.Merge && input.TargetId is null)
-                    throw new TtsuImportReviewRequiredException("Choose an existing book or explicitly choose Create a new copy.");
 
                 prepared.Add((input, book, review, candidate));
             }
@@ -476,6 +475,14 @@ public sealed class TtsuModel(
                     catch (TimeoutException)
                     {
                         freshSelection = null;
+                    }
+
+                    if (freshSelection is not null &&
+                        review.ProviderIdentity is not null &&
+                        TtsuProviderIdentityHint.FromJiten(freshSelection) != review.ProviderIdentity)
+                    {
+                        throw new TtsuImportReviewRequiredException(
+                            "The selected Jiten identity could not be revalidated. Review the import again.");
                     }
 
                     var hasFolderCover = !string.IsNullOrWhiteSpace(book.Book.CoverImage);
@@ -585,12 +592,14 @@ public sealed class TtsuModel(
 
                 requests.Add(new(
                     book.Book,
-                    input.Mode == TtsuImportMode.Create ? null : input.TargetId,
+                    review.TargetChoice.WorkId,
                     Resolutions(input),
                     review.Fingerprint,
                     input.OrphanLogIds,
                     input.ProgressChoice,
-                    metadataRequest));
+                    metadataRequest,
+                    review.TargetChoice,
+                    review.ProviderIdentity));
             }
 
             receipt = await _imports.ApplyAsync(batch.Id, requests, cancellationToken);
@@ -622,22 +631,125 @@ public sealed class TtsuModel(
 
     private readonly record struct TargetProtectionInfo(bool HasBinding, bool HasJitenLink, bool HasCover);
 
+    private static TtsuProviderIdentityHint? ProviderIdentity(TtsuEnrichmentCandidate? candidate) =>
+        candidate is null
+            ? null
+            : new TtsuProviderIdentityHint(
+                "jiten",
+                candidate.Candidate.SubdeckId is int child
+                    ? $"subdeck:{candidate.Candidate.DeckId}:{child}"
+                    : $"deck:{candidate.Candidate.DeckId}");
+
+    private static (TtsuImportTargetChoice Choice, bool RequiresChoice) ResolveTargetChoice(
+        TtsuBookSelectionInput input,
+        TtsuBookSelectionInput? postedInput,
+        TtsuImportBatch batch,
+        TtsuImportTargetReview review)
+    {
+        if (postedInput is null)
+        {
+            return review.SuggestedChoice is { } suggested
+                ? (suggested, false)
+                : (TtsuImportTargetChoice.NewInstallment(), true);
+        }
+
+        if (input.CopyIntent is { } intent && Enum.IsDefined(intent))
+        {
+            var explicitChoice = intent switch
+            {
+                TtsuCopyIntent.ExistingCopy when input.TargetId is Guid workId =>
+                    TtsuImportTargetChoice.ExistingCopy(workId),
+                TtsuCopyIntent.NewCopyUnderExistingInstallment when input.InstallmentId is Guid installmentId =>
+                    TtsuImportTargetChoice.NewCopy(installmentId),
+                TtsuCopyIntent.NewInstallmentAndCopy => TtsuImportTargetChoice.NewInstallment(),
+                _ => null
+            };
+            if (explicitChoice is not null && SubmittedChoiceMatchesReview(input, explicitChoice))
+            {
+                return (explicitChoice, false);
+            }
+        }
+
+        // Until Batch 4B renders the new controls, preserve the server-reviewed
+        // new-copy-under-installment choice across the legacy Create/Merge form.
+        if (batch.Reviews.TryGetValue(input.ReviewToken, out var priorReview) &&
+            priorReview.BookKey == input.BookKey &&
+            SubmittedChoiceMatchesReview(input, priorReview.TargetChoice))
+        {
+            return (priorReview.TargetChoice, false);
+        }
+
+        if (!Enum.IsDefined(input.Mode))
+        {
+            return (TtsuImportTargetChoice.NewInstallment(), true);
+        }
+        if (input.Mode == TtsuImportMode.Merge)
+        {
+            return input.TargetId is Guid workId
+                ? (TtsuImportTargetChoice.ExistingCopy(workId), false)
+                : (TtsuImportTargetChoice.NewInstallment(), true);
+        }
+        return (TtsuImportTargetChoice.NewInstallment(), false);
+    }
+
+    private static void NormalizeInputChoice(
+        TtsuBookSelectionInput input,
+        TtsuImportTargetChoice choice,
+        bool requiresChoice)
+    {
+        if (requiresChoice)
+        {
+            input.CopyIntent = null;
+            input.InstallmentId = null;
+            input.TargetId = null;
+            input.Mode = TtsuImportMode.Merge;
+            return;
+        }
+
+        input.CopyIntent = choice.Intent;
+        input.TargetId = choice.WorkId;
+        input.InstallmentId = choice.InstallmentId;
+        input.Mode = choice.Intent == TtsuCopyIntent.ExistingCopy
+            ? TtsuImportMode.Merge
+            : TtsuImportMode.Create;
+    }
+
+    private static bool SubmittedChoiceMatchesReview(
+        TtsuBookSelectionInput input,
+        TtsuImportTargetChoice reviewedChoice)
+    {
+        if (input.CopyIntent is { } intent)
+        {
+            return intent == reviewedChoice.Intent &&
+                input.TargetId == reviewedChoice.WorkId &&
+                input.InstallmentId == reviewedChoice.InstallmentId;
+        }
+
+        return reviewedChoice.Intent switch
+        {
+            TtsuCopyIntent.ExistingCopy =>
+                input.Mode == TtsuImportMode.Merge && input.TargetId == reviewedChoice.WorkId,
+            TtsuCopyIntent.NewCopyUnderExistingInstallment => input.Mode == TtsuImportMode.Create,
+            TtsuCopyIntent.NewInstallmentAndCopy => input.Mode == TtsuImportMode.Create,
+            _ => false
+        };
+    }
+
     private static (bool IsEligible, string? IneligibilityReason) EvaluateTargetProtection(
-        TtsuImportMode mode,
-        Guid? targetId,
+        TtsuImportTargetChoice choice,
         IReadOnlyDictionary<Guid, TargetProtectionInfo> protections)
     {
-        if (mode == TtsuImportMode.Create)
+        if (choice.Intent != TtsuCopyIntent.ExistingCopy)
         {
             return (true, null);
         }
 
-        if (targetId is null)
+        if (choice.WorkId is not Guid targetId)
         {
             return (false, "Choose an existing book or create a new copy to apply metadata.");
         }
 
-        if (!protections.TryGetValue(targetId.Value, out var info))
+        if (!protections.TryGetValue(targetId, out var info))
         {
             return (false, "The selected target is no longer available.");
         }
@@ -670,32 +782,13 @@ public sealed class TtsuModel(
         IsEnrichmentActive = batch.Books.Any(b => b.EnrichmentState is TtsuEnrichmentAttemptState.Pending or TtsuEnrichmentAttemptState.InProgress);
 
         Targets = await _imports.GetTargetsAsync(cancellationToken);
+        InstallmentTargets = await _imports.GetInstallmentTargetsAsync(cancellationToken);
         Orphans = (await _imports.GetOrphansAsync(cancellationToken)).Select(x => new TtsuOrphanViewModel(x.Id, x.Date, x.CharactersRead, x.TimeSpentMinutes)).ToList();
         var posted = preserve ? Selections.GroupBy(x => x.BookKey).ToDictionary(x => x.Key, x => x.First()) : [];
 
-        var targetIdsToCheck = new HashSet<Guid>();
-        var matches = new Dictionary<Guid, TtsuMatch>();
-        foreach (var item in batch.Books)
-        {
-            var match = await _imports.MatchAsync(item.Book, cancellationToken);
-            matches[item.Key] = match;
-            var postedTarget = posted.GetValueOrDefault(item.Key)?.TargetId;
-            if (postedTarget.HasValue)
-            {
-                targetIdsToCheck.Add(postedTarget.Value);
-            }
-            else
-            {
-                if (match.WorkId.HasValue)
-                {
-                    targetIdsToCheck.Add(match.WorkId.Value);
-                }
-            }
-        }
-
         var protections = await dbContext.MediaWorks
             .AsNoTracking()
-            .Where(w => targetIdsToCheck.Contains(w.Id))
+            .Where(w => w.MediaType == MediaType.Book)
             .Select(w => new
             {
                 w.Id,
@@ -712,25 +805,14 @@ public sealed class TtsuModel(
         Selections = [];
         foreach (var item in batch.Books)
         {
-            var match = matches[item.Key];
             var postedInput = posted.GetValueOrDefault(item.Key);
             var input = postedInput ?? new TtsuBookSelectionInput
             {
                 BookKey = item.Key,
-                Selected = true,
-                TargetId = match.WorkId,
-                Mode = match.WorkId is null && !match.IsAmbiguous ? TtsuImportMode.Create : TtsuImportMode.Merge
+                Selected = true
             };
-            var plan = await _imports.PreviewAsync(item.Book, input.Mode == TtsuImportMode.Create ? null : input.TargetId,
-                Resolutions(input), input.OrphanLogIds, cancellationToken, input.ProgressChoice);
-            if (!Enum.IsDefined(input.Mode) || input.Mode == TtsuImportMode.Merge && input.TargetId is null)
-                plan = plan with { Error = "Choose a target book or create a new copy." };
-            var choices = Resolutions(input);
-            input.Days = plan.Days.Where(x => x.ReviewReason is not null).Select(x => new TtsuDayResolutionInput
-            { Date = x.Date, Choice = choices.GetValueOrDefault(x.Date) ?? string.Empty }).ToList();
 
-            var (isEligible, ineligibilityReason) = EvaluateTargetProtection(input.Mode, input.TargetId, protections);
-
+            TtsuEnrichmentCandidate? selectedCandidate = null;
             if (item.Enrichment is not null)
             {
                 var postedCandidate = postedInput?.CandidateKey is Guid postedCandidateKey
@@ -745,11 +827,7 @@ public sealed class TtsuModel(
                         "The metadata selection is invalid. Choose one of this book's available candidates.");
                 }
 
-                if (!isEligible)
-                {
-                    input.CandidateKey = null;
-                }
-                else if (!preserve || autoSelectHighConfidence == true)
+                if (!preserve || autoSelectHighConfidence == true)
                 {
                     input.CandidateKey = item.Enrichment.Confidence == MatchConfidence.High
                         ? item.Enrichment.Candidates.FirstOrDefault(c => c.IsTopCandidate && c.IsSelectable)?.Key
@@ -761,14 +839,51 @@ public sealed class TtsuModel(
                         ? postedCandidate.Key
                         : null;
                 }
+                selectedCandidate = input.CandidateKey is Guid candidateKey
+                    ? item.Enrichment.Candidates.SingleOrDefault(candidate =>
+                        candidate.Key == candidateKey && candidate.IsSelectable)
+                    : null;
             }
             else
             {
                 input.CandidateKey = null;
             }
 
+            var providerIdentity = ProviderIdentity(selectedCandidate);
+            var targetReview = await _imports.ReviewTargetAsync(item.Book, providerIdentity, cancellationToken);
+            providerIdentity = targetReview.ProviderIdentity;
+            var (targetChoice, requiresChoice) = ResolveTargetChoice(input, postedInput, batch, targetReview);
+            NormalizeInputChoice(input, targetChoice, requiresChoice);
+
+            var (isEligible, ineligibilityReason) = EvaluateTargetProtection(targetChoice, protections);
+            if (!isEligible)
+            {
+                input.CandidateKey = null;
+                selectedCandidate = null;
+                // A persisted provider identity may still have been the evidence which
+                // found the canonical installment. Keep that identity in the reviewed
+                // target contract even though protected copy metadata is not changed.
+            }
+
+            var plan = await _imports.PreviewTargetAsync(item.Book, targetChoice,
+                Resolutions(input), input.OrphanLogIds, cancellationToken, input.ProgressChoice,
+                providerIdentity);
+            if (requiresChoice || !Enum.IsDefined(input.Mode))
+            {
+                plan = plan with { Error = "Choose an existing copy, a catalogue installment for a new copy, or a new installment." };
+            }
+            var choices = Resolutions(input);
+            input.Days = plan.Days.Where(x => x.ReviewReason is not null).Select(x => new TtsuDayResolutionInput
+            { Date = x.Date, Choice = choices.GetValueOrDefault(x.Date) ?? string.Empty }).ToList();
+
             input.ReviewToken = Guid.NewGuid();
-            batch.Reviews[input.ReviewToken] = new(item.Key, plan.Fingerprint, input.CandidateKey, input.SelectedCoverKey);
+            batch.Reviews[input.ReviewToken] = new(
+                item.Key,
+                plan.Fingerprint,
+                targetChoice,
+                providerIdentity,
+                input.CandidateKey,
+                input.SelectedCoverKey);
 
             TtsuBookEnrichmentViewModel? enrichmentVm = null;
             if (item.Enrichment is not null)
@@ -886,7 +1001,7 @@ public sealed class TtsuModel(
                 item.Key,
                 item.Book.Title,
                 item.Book.FolderHint,
-                match.Reason,
+                targetReview.Reason,
                 plan,
                 enrichmentVm,
                 string.IsNullOrWhiteSpace(item.Book.CoverImage) ? null : item.Book.CoverImage));

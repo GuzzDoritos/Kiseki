@@ -1,0 +1,432 @@
+@page "{id:guid}"
+@model Kiseki.Web.Pages.Franchises.DetailsModel
+@using Kiseki.Core.Services
+@using Kiseki.Core.Entities
+@{
+    ViewData["Title"] = $"{Model.FranchiseDetails.Title} - Franchise";
+    var franchise = Model.FranchiseDetails;
+}
+
+<nav class="breadcrumb-nav" aria-label="Breadcrumb">
+    <a asp-page="/Franchises/Index">Franchises</a><span>/</span><span>@franchise.Title</span>
+</nav>
+
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Franchise</p>
+        <h1>@franchise.Title</h1>
+        <p class="page-description">
+            @franchise.Series.Count @(franchise.Series.Count == 1 ? "series" : "series") in franchise
+            @if (franchise.JitenAnchorDeckId.HasValue)
+            {
+                <span class="badge bg-secondary ms-2">Anchor Deck #@franchise.JitenAnchorDeckId</span>
+            }
+        </p>
+    </div>
+    <div class="header-actions">
+        <a class="btn btn-outline-secondary" asp-page="/Franchises/Edit" asp-route-id="@franchise.Id">Edit franchise</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="page-notice" role="status">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="page-error" role="alert">@Model.Error</div>
+}
+@if (franchise.IsTruncated)
+{
+    <div class="page-notice page-notice-warning" role="status">
+        Showing the first 100 series. Additional series are truncated.
+    </div>
+}
+
+@if (Model.Receipt is not null)
+{
+    var r = Model.Receipt;
+    <section class="content-card receipt-section section-block mb-4" aria-labelledby="receipt-heading">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+                <h2 id="receipt-heading" class="h4 mb-0">Topology Sync Receipt</h2>
+                <small class="text-muted">Completed at @r.CompletedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</small>
+            </div>
+            @if (r.IsReplayed)
+            {
+                <span class="badge bg-info text-dark">Replayed Result</span>
+            }
+            else
+            {
+                <span class="badge bg-success">Applied</span>
+            }
+        </div>
+
+        <div class="receipt-stats-grid mb-3">
+            <div class="receipt-stat-card">
+                <span class="stat-number text-success">@r.CreatedSeries</span>
+                <span class="stat-label">Series Created</span>
+            </div>
+            <div class="receipt-stat-card">
+                <span class="stat-number text-primary">@r.LinkedSeries</span>
+                <span class="stat-label">Series Linked</span>
+            </div>
+            <div class="receipt-stat-card">
+                <span class="stat-number text-muted">@r.IgnoredNodes</span>
+                <span class="stat-label">Nodes Ignored</span>
+            </div>
+            <div class="receipt-stat-card">
+                <span class="stat-number text-warning">@r.UnresolvedNodes</span>
+                <span class="stat-label">Nodes Unresolved</span>
+            </div>
+        </div>
+
+        <div class="text-end">
+            <a class="btn btn-sm btn-outline-secondary" asp-page="/Franchises/Details" asp-route-id="@franchise.Id">Dismiss receipt</a>
+        </div>
+    </section>
+}
+
+<section class="content-card section-block mb-4" aria-labelledby="member-series-heading">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <p class="eyebrow">Members</p>
+            <h2 id="member-series-heading" class="h3">Franchise Series</h2>
+        </div>
+    </div>
+
+    @if (franchise.Series.Count == 0)
+    {
+        <p class="text-muted">No series are currently assigned to this franchise. Add an existing series below or discover series through Jiten graph synchronization.</p>
+    }
+    else
+    {
+        @if (franchise.BookSeries.Any())
+        {
+            <div class="media-group mb-4">
+                <h3 class="h5 text-muted mb-2">Book Series</h3>
+                <div class="series-list">
+                    @foreach (var s in franchise.BookSeries)
+                    {
+                        <div class="media-row series-row d-flex justify-content-between align-items-center p-3 mb-2 rounded bg-surface border">
+                            <div class="d-flex flex-column gap-1 flex-grow-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="media-badge media-badge-book">Book</span>
+                                    <a asp-page="/Series/Details" asp-route-id="@s.SeriesId" class="fw-bold text-decoration-none">
+                                        @s.Title
+                                    </a>
+                                    @if (s.JitenDeckId.HasValue)
+                                    {
+                                        <small class="text-muted">(Deck #@s.JitenDeckId)</small>
+                                    }
+                                </div>
+                                <div class="small text-muted d-flex align-items-center gap-3">
+                                    <span>Progress: @s.HeadlineProgressText</span>
+                                    @if (s.LifetimeCharactersRead > 0)
+                                    {
+                                        <span>&bull; @s.LifetimeCharactersRead.ToString("N0") chars</span>
+                                    }
+                                    @if (s.LifetimeMinutes > 0)
+                                    {
+                                        <span>&bull; @s.LifetimeMinutes.ToString("N0") min</span>
+                                    }
+                                </div>
+                                @if (s.ProgressBar is not null)
+                                {
+                                    <div class="mt-1" style="max-width: 250px;">
+                                        <partial name="_ProgressBar" model="s.ProgressBar" />
+                                    </div>
+                                }
+                            </div>
+                            <form method="post" asp-page-handler="UnassignSeries" asp-route-id="@franchise.Id" class="ms-3">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="UnassignSeriesId" value="@s.SeriesId" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this series from the franchise" onclick="return confirm('Unassign @s.Title from this franchise? The series and its works will remain intact.');">
+                                    Unassign
+                                </button>
+                            </form>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (franchise.AnimeSeries.Any())
+        {
+            <div class="media-group mb-4">
+                <h3 class="h5 text-muted mb-2">Anime Series</h3>
+                <div class="series-list">
+                    @foreach (var s in franchise.AnimeSeries)
+                    {
+                        <div class="media-row series-row d-flex justify-content-between align-items-center p-3 mb-2 rounded bg-surface border">
+                            <div class="d-flex flex-column gap-1 flex-grow-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="media-badge media-badge-anime">Anime</span>
+                                    <a asp-page="/Series/Details" asp-route-id="@s.SeriesId" class="fw-bold text-decoration-none">
+                                        @s.Title
+                                    </a>
+                                    @if (s.JitenDeckId.HasValue)
+                                    {
+                                        <small class="text-muted">(Deck #@s.JitenDeckId)</small>
+                                    }
+                                </div>
+                                <div class="small text-muted">
+                                    <span class="badge bg-secondary">Progress tracking not available for this media type</span>
+                                    @if (s.LifetimeMinutes > 0)
+                                    {
+                                        <span class="ms-2">&bull; @s.LifetimeMinutes.ToString("N0") min watched</span>
+                                    }
+                                </div>
+                            </div>
+                            <form method="post" asp-page-handler="UnassignSeries" asp-route-id="@franchise.Id" class="ms-3">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="UnassignSeriesId" value="@s.SeriesId" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this series from the franchise" onclick="return confirm('Unassign @s.Title from this franchise? The series and its works will remain intact.');">
+                                    Unassign
+                                </button>
+                            </form>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (franchise.OtherSeries.Any())
+        {
+            <div class="media-group mb-4">
+                <h3 class="h5 text-muted mb-2">Other Media Series</h3>
+                <div class="series-list">
+                    @foreach (var s in franchise.OtherSeries)
+                    {
+                        <div class="media-row series-row d-flex justify-content-between align-items-center p-3 mb-2 rounded bg-surface border">
+                            <div class="d-flex flex-column gap-1 flex-grow-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="media-badge media-badge-@s.MediaType.ToString().ToLowerInvariant()">@s.MediaType</span>
+                                    <a asp-page="/Series/Details" asp-route-id="@s.SeriesId" class="fw-bold text-decoration-none">
+                                        @s.Title
+                                    </a>
+                                </div>
+                                <div class="small text-muted">
+                                    <span class="badge bg-secondary">Progress tracking not available for this media type</span>
+                                </div>
+                            </div>
+                            <form method="post" asp-page-handler="UnassignSeries" asp-route-id="@franchise.Id" class="ms-3">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="UnassignSeriesId" value="@s.SeriesId" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove this series from the franchise">
+                                    Unassign
+                                </button>
+                            </form>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
+</section>
+
+@if (Model.AvailableSeries.Count > 0)
+{
+    <section class="content-card section-block mb-4" aria-labelledby="add-series-heading">
+        <h2 id="add-series-heading" class="h4 mb-2">Add Series to Franchise</h2>
+        <p class="text-muted small mb-3">Assign an existing series to this franchise. If the series already belongs to another franchise, it will be moved.</p>
+        <form method="post" asp-page-handler="MoveSeries" asp-route-id="@franchise.Id" class="row g-2 align-items-center">
+            @Html.AntiForgeryToken()
+            <div class="col-sm-8 col-md-6">
+                <label for="moveSeriesSelect" class="visually-hidden">Select series to assign</label>
+                <select id="moveSeriesSelect" class="form-select" asp-for="MoveSeriesId">
+                    <option value="">Choose an existing series...</option>
+                    @foreach (var opt in Model.AvailableSeries)
+                    {
+                        var moveNotice = !string.IsNullOrEmpty(opt.CurrentFranchiseTitle)
+                            ? $" (moves from '{opt.CurrentFranchiseTitle}')"
+                            : " (unassigned)";
+                        <option value="@opt.SeriesId">@opt.Title [@opt.MediaType]@moveNotice</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-primary">Add series</button>
+            </div>
+        </form>
+    </section>
+}
+
+<section class="content-card section-block mb-4" aria-labelledby="topology-sync-heading">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <p class="eyebrow">External Integration</p>
+            <h2 id="topology-sync-heading" class="h3">Jiten Graph Discovery</h2>
+            <p class="text-muted small mb-0">Discover connected franchise media decks on Jiten.moe and review proposed additions.</p>
+        </div>
+    </div>
+
+    <form method="post" asp-page-handler="PreviewTopology" asp-route-id="@franchise.Id" class="row g-2 align-items-center mb-4">
+        @Html.AntiForgeryToken()
+        <div class="col-sm-6 col-md-4">
+            <label for="previewAnchorDeckId" class="form-label small text-muted">Jiten Anchor Deck ID</label>
+            <input id="previewAnchorDeckId" class="form-control" type="number" min="1" asp-for="PreviewAnchorDeckId" placeholder="e.g. 10" required />
+            <span asp-validation-for="PreviewAnchorDeckId" class="form-field-error"></span>
+        </div>
+        <div class="col-auto align-self-end">
+            <button type="submit" class="btn btn-primary">Preview Jiten Graph</button>
+        </div>
+    </form>
+
+    @if (Model.TopologyReview is not null)
+    {
+        var rev = Model.TopologyReview;
+        <div class="topology-review-box p-3 rounded bg-surface border" id="topology-review-container">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+                <div>
+                    <h3 class="h5 mb-1">Graph Review for Deck #@rev.AnchorDeckId</h3>
+                    <p class="text-muted small mb-1">
+                        Discovered @rev.NodeCount @(rev.NodeCount == 1 ? "node" : "nodes") and @rev.EdgeCount @(rev.EdgeCount == 1 ? "edge" : "edges").
+                        Review each node before applying changes.
+                    </p>
+                    <small class="text-muted" aria-live="polite">
+                        Review active until @rev.ExpiresAtUtc.ToLocalTime().ToString("HH:mm:ss")
+                    </small>
+                </div>
+                <div class="d-flex gap-2">
+                    @if (rev.IsCompleteGraph)
+                    {
+                        <span class="badge bg-success">Complete Graph</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-warning text-dark">Incomplete Graph</span>
+                    }
+                    @if (rev.IsTruncated)
+                    {
+                        <span class="badge bg-danger">Truncated</span>
+                    }
+                </div>
+            </div>
+
+            @if (rev.IsTruncated)
+            {
+                <div class="page-notice page-notice-warning mb-3" role="alert">
+                    <strong>Warning: Truncated Graph.</strong>
+                    The graph exceeded provider traversal limits. Series creation and linking are disabled to protect membership; nodes may only be ignored or kept unresolved.
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(rev.Warning))
+            {
+                <div class="page-notice page-notice-warning mb-3" role="alert">
+                    @rev.Warning
+                </div>
+            }
+
+            <form method="post" asp-page-handler="ApplyTopology" asp-route-id="@franchise.Id" data-submit-lock>
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="ApplyReviewId" value="@rev.ReviewId" />
+                <input type="hidden" asp-for="ApplyExpectedFingerprint" value="@rev.Fingerprint" />
+                <input type="hidden" asp-for="ApplyOperationId" value="@rev.OperationId" />
+
+                <div class="proposals-list d-flex flex-column gap-3 mb-4">
+                    @for (var i = 0; i < rev.Proposals.Count; i++)
+                    {
+                        var prop = rev.Proposals[i];
+                        <div class="content-card proposal-card p-3 border">
+                            <input type="hidden" name="Choices[@i].ProposalId" value="@prop.ProposalId" />
+
+                            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                                <div>
+                                    <h4 class="h6 mb-1">
+                                        @prop.Title
+                                        <small class="text-muted">(Deck #@prop.DeckId)</small>
+                                    </h4>
+                                    <div class="small text-muted d-flex align-items-center gap-2">
+                                        @if (prop.Classification == JitenFranchiseNodeClassification.Book)
+                                        {
+                                            <span class="media-badge media-badge-book">Book (@prop.CharacterCount.ToString("N0") ch)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="media-badge media-badge-anime">Unsupported Media (Type @prop.ProviderMediaType)</span>
+                                        }
+                                        @if (prop.PersistedResolution.HasValue)
+                                        {
+                                            <span class="badge bg-secondary">Prior decision: @prop.PersistedResolution</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p class="small text-muted mb-3">@prop.Message</p>
+
+                            <fieldset class="proposal-actions-fieldset p-3 border rounded">
+                                <legend class="h6 small px-2">Action for @prop.Title</legend>
+                                <div class="d-flex flex-column gap-2">
+                                    @foreach (var action in prop.AllowedActions)
+                                    {
+                                        var isChecked = prop.SelectedAction == action;
+                                        var radioId = $"action_{i}_{action}";
+                                        <div class="form-check">
+                                            <input class="form-check-input"
+                                                   type="radio"
+                                                   name="Choices[@i].Action"
+                                                   id="@radioId"
+                                                   value="@action"
+                                                   checked="@(isChecked ? "checked" : null)" />
+                                            <label class="form-check-label" for="@radioId">
+                                                @switch (action)
+                                                {
+                                                    case JitenFranchiseNodeAction.LinkExistingSeries:
+                                                        if (prop.ExactSeriesId.HasValue)
+                                                        {
+                                                            <span>Link to existing series <strong>@prop.ExactSeriesTitle</strong></span>
+                                                            <input type="hidden" name="Choices[@i].MediaSeriesId" value="@prop.ExactSeriesId" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>Link to an existing series:</span>
+                                                            <div class="candidate-selector mt-1">
+                                                                <select class="form-select form-select-sm" name="Choices[@i].MediaSeriesId">
+                                                                    @foreach (var c in prop.CandidateSeries)
+                                                                    {
+                                                                        <option value="@c.SeriesId" selected="@(c.SeriesId == prop.SelectedSeriesId ? "selected" : null)">
+                                                                            @c.Title
+                                                                        </option>
+                                                                    }
+                                                                </select>
+                                                            </div>
+                                                        }
+                                                        break;
+
+                                                    case JitenFranchiseNodeAction.CreateSeparateBookSeries:
+                                                        <span>Create separate book series</span>
+                                                        break;
+
+                                                    case JitenFranchiseNodeAction.Ignore:
+                                                        <span>Ignore node (durable decision)</span>
+                                                        break;
+
+                                                    case JitenFranchiseNodeAction.KeepUnresolved:
+                                                        <span>Keep unresolved (durable decision)</span>
+                                                        break;
+                                                }
+                                            </label>
+                                        </div>
+                                    }
+                                </div>
+                            </fieldset>
+                        </div>
+                    }
+                </div>
+
+                <div class="form-actions d-flex gap-2">
+                    <button type="submit" class="btn btn-primary" data-submitting-label="Applying topology…">
+                        Apply Topology Changes
+                    </button>
+                    <a asp-page="/Franchises/Details" asp-route-id="@franchise.Id" class="btn btn-outline-secondary">
+                        Cancel Review
+                    </a>
+                </div>
+            </form>
+        </div>
+    }
+</section>
+

@@ -18,6 +18,8 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
         var work = await dbContext.MediaWorks
             .AsNoTracking()
             .Include(item => item.MediaSeries)
+            .Include(item => item.MediaInstallment)
+                .ThenInclude(installment => installment!.MediaSeries)
             .Include(item => item.Logs)
             .SingleOrDefaultAsync(item => item.Id == id, cancellationToken);
 

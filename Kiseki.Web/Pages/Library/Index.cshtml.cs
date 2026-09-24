@@ -69,6 +69,8 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
         var query = dbContext.MediaWorks
             .AsNoTracking()
             .Include(work => work.MediaSeries)
+            .Include(work => work.MediaInstallment)
+                .ThenInclude(installment => installment!.MediaSeries)
             .Include(work => work.Logs)
             .AsQueryable();
 
@@ -106,7 +108,7 @@ public sealed class IndexModel(ImmersionDbContext dbContext) : PageModel
                 return new MediaWorkListItemViewModel(
                     work.Id,
                     work.Title,
-                    work.MediaSeries?.Title,
+                    work.MediaInstallment?.MediaSeries?.Title ?? work.MediaSeries?.Title,
                     work.MediaType,
                     work.CurrentCharactersRead,
                     work.TotalCharacters,

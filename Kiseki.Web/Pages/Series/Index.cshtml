@@ -8,21 +8,101 @@
     <div>
         <p class="eyebrow">Organization</p>
         <h1>Series</h1>
-        <p class="page-description">Group related works while keeping books, anime, and games distinct.</p>
+        <p class="page-description">Group related works and track overarching progress while keeping media types distinct.</p>
     </div>
     <a class="btn btn-primary" asp-page="/Series/Create">Create series</a>
 </div>
 
+@if (!string.IsNullOrEmpty(Model.Notice))
+{
+    <div class="page-notice" role="status">@Model.Notice</div>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="page-error" role="alert">@Model.Error</div>
+}
+@if (Model.IsTruncated)
+{
+    <div class="page-notice page-notice-warning" role="status">
+        Showing the first 100 series. Additional series are truncated.
+    </div>
+}
+
 <div class="filter-tabs page-tabs" role="group" aria-label="Media type">
-    <button type="button" class="filter-tab active">All</button>
-    <button type="button" class="filter-tab">Books</button>
-    <button type="button" class="filter-tab">Anime</button>
-    <button type="button" class="filter-tab">Games</button>
+    <a asp-page="/Series/Index" class="filter-tab @(!Model.Type.HasValue ? "active" : "")">All</a>
+    <a asp-page="/Series/Index" asp-route-type="Book" class="filter-tab @(Model.Type == Kiseki.Core.Entities.MediaType.Book ? "active" : "")">Books</a>
+    <a asp-page="/Series/Index" asp-route-type="Anime" class="filter-tab @(Model.Type == Kiseki.Core.Entities.MediaType.Anime ? "active" : "")">Anime</a>
+    <a asp-page="/Series/Index" asp-route-type="Game" class="filter-tab @(Model.Type == Kiseki.Core.Entities.MediaType.Game ? "active" : "")">Games</a>
 </div>
 
-<section class="content-card empty-state">
-    <div class="empty-icon">▦</div>
-    <h2>No series to show yet</h2>
-    <p>Series created in Core will eventually appear here with aggregate completion and work counts.</p>
-    <a class="btn btn-primary" asp-page="/Series/Create">Create your first series</a>
-</section>
+@if (Model.Series.Count == 0)
+{
+    <section class="content-card empty-state">
+        <div class="empty-icon">▦</div>
+        <h2>No series to show yet</h2>
+        <p>Group related installments and track your overall progress across entire series.</p>
+        <a class="btn btn-primary" asp-page="/Series/Create">Create your first series</a>
+    </section>
+}
+else
+{
+    <div class="series-list">
+        @foreach (var series in Model.Series)
+        {
+            <article class="media-row series-row">
+                <div class="media-row-link">
+                    <a class="media-details-overlay"
+                       asp-page="/Series/Details"
+                       asp-route-id="@series.Id"
+                       aria-label="Open @series.Title series details"></a>
+                    <span class="media-cover media-cover-@series.MediaType.ToString().ToLowerInvariant() @(series.Cover is not null ? "has-image" : string.Empty)"
+                          aria-hidden="true"
+                          data-cover-frame>
+                        @if (series.Cover is not null)
+                        {
+                            <img class="media-cover-image"
+                                 src="@series.Cover.Url"
+                                 alt=""
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 data-cover-image />
+                        }
+                        <span data-cover-fallback hidden="@(series.Cover is not null ? "hidden" : null)">@series.TypeToJapanese</span>
+                    </span>
+
+                    <div class="media-copy">
+                        <span class="media-title">@series.Title</span>
+                        <span class="media-series">
+                            @series.CompletedVolumesSummary
+                            &bull; @series.TrackingSummary
+                            @if (series.HasPartialCoverage)
+                            {
+                                <text>&bull; <span class="text-muted">(@series.PartialCoverageLabel)</span></text>
+                            }
+                        </span>
+                        <span class="media-tags">
+                            <span class="media-badge media-badge-@series.MediaType.ToString().ToLowerInvariant()">@series.MediaType</span>
+                            @if (series.LifetimeCharacters > 0)
+                            {
+                                <span class="source-tag"><i></i>@($"{series.LifetimeCharacters:N0} ch")</span>
+                            }
+                            @if (series.LifetimeMinutes > 0)
+                            {
+                                <span class="source-tag"><i></i>@($"{series.LifetimeMinutes:N0} min")</span>
+                            }
+                        </span>
+                    </div>
+
+                    <div class="media-row-progress">
+                        <partial name="_ProgressBar" model="series.ProgressBar" />
+                    </div>
+
+                    <span class="media-status @series.StatusCss">
+                        <i aria-hidden="true"></i>
+                        @series.StatusLabel
+                    </span>
+                </div>
+            </article>
+        }
+    </div>
+}

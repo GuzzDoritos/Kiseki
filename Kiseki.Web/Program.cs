@@ -98,8 +98,28 @@ builder.Services.AddAntiforgery(options =>
 });
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
-    client.Timeout = TimeSpan.FromSeconds(15));
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    var configuredBaseAddress = builder.Configuration["Jiten:BaseAddress"];
+    if (string.IsNullOrWhiteSpace(configuredBaseAddress)) return;
+
+    if (!Uri.TryCreate(configuredBaseAddress, UriKind.Absolute, out var uri) ||
+        (uri.Scheme != Uri.UriSchemeHttps && !(uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback)))
+    {
+        throw new InvalidOperationException(
+            "Jiten:BaseAddress must be an absolute HTTPS URI or an HTTP loopback URI for local testing.");
+    }
+
+    client.BaseAddress = uri.AbsolutePath.EndsWith('/')
+        ? uri
+        : new Uri(uri.AbsoluteUri + "/");
+});
 builder.Services.AddScoped<IJitenSelectionResolver, JitenSelectionResolver>();
+builder.Services.AddSingleton<IJitenCatalogueReviewStore, InMemoryJitenCatalogueReviewStore>();
+builder.Services.AddScoped<JitenCatalogueReconciliationService>();
+builder.Services.AddScoped<FranchiseCatalogueService>();
+builder.Services.AddSingleton<IJitenFranchiseTopologyReviewStore, InMemoryJitenFranchiseTopologyReviewStore>();
+builder.Services.AddScoped<JitenFranchiseTopologyService>();
 builder.Services.AddSingleton<IMediaTitleParser, MediaTitleParser>();
 builder.Services.AddSingleton<IJitenCandidateScorer, JitenCandidateScorer>();
 builder.Services.AddScoped<IJitenMatchService, JitenMatchService>();

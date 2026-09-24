@@ -1,4 +1,5 @@
 using Kiseki.Core.DTOs;
+using Kiseki.Core.Models;
 using Kiseki.Core.Models.GoogleBooks;
 using Kiseki.Core.Models.Metadata;
 
@@ -55,7 +56,13 @@ public sealed record TtsuImportBatch(
     }
 }
 
-public sealed record TtsuReviewedPlan(Guid BookKey, string Fingerprint, Guid? CandidateKey = null, string? SelectedCoverKey = null);
+public sealed record TtsuReviewedPlan(
+    Guid BookKey,
+    string Fingerprint,
+    TtsuImportTargetChoice TargetChoice,
+    TtsuProviderIdentityHint? ProviderIdentity = null,
+    Guid? CandidateKey = null,
+    string? SelectedCoverKey = null);
 
 public sealed record TtsuCandidateGoogleCover(
     string VolumeId,

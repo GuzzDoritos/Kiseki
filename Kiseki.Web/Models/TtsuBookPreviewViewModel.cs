@@ -84,6 +84,8 @@ public sealed class TtsuBookSelectionInput
     public bool Selected { get; set; }
     public TtsuImportMode Mode { get; set; }
     public Guid? TargetId { get; set; }
+    public TtsuCopyIntent? CopyIntent { get; set; }
+    public Guid? InstallmentId { get; set; }
     public Guid ReviewToken { get; set; }
     public List<TtsuDayResolutionInput> Days { get; set; } = [];
     public List<Guid> OrphanLogIds { get; set; } = [];
