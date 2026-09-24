@@ -81,6 +81,13 @@ namespace Kiseki.Core.DTOs
         public List<JitenDeckDTO> SubDecks { get; set; } = [];
     }
 
+    public sealed record JitenDeckCatalogueFetchResult(
+        JitenDeckDetailDTO? Detail,
+        bool IsComplete,
+        int ExpectedItems,
+        int RetrievedItems,
+        string? Warning = null);
+
     public class JitenFranchiseDTO
     {
         [JsonPropertyName("nodes")]

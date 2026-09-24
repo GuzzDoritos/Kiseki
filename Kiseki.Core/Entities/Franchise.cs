@@ -7,7 +7,7 @@ public class Franchise
     public Franchise(string title, int? jitenAnchorDeckId = null)
     {
         SetTitle(title);
-        JitenAnchorDeckId = jitenAnchorDeckId;
+        SetJitenAnchorDeckId(jitenAnchorDeckId);
     }
 
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -27,5 +27,15 @@ public class Franchise
         }
 
         Title = title.Trim();
+    }
+
+    public void SetJitenAnchorDeckId(int? deckId)
+    {
+        if (deckId is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(deckId), "A Jiten anchor deck ID must be positive or empty.");
+        }
+
+        JitenAnchorDeckId = deckId;
     }
 }

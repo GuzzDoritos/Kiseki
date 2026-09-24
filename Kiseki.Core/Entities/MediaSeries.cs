@@ -21,6 +21,7 @@ public class MediaSeries
     public int? JitenDeckId { get; set; }
 
     public List<MediaWork> Works { get; set; } = [];
+    public List<MediaInstallment> Installments { get; set; } = [];
 
     public void SetTitle(string title)
     {

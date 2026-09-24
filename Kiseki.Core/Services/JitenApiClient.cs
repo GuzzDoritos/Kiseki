@@ -7,6 +7,8 @@ namespace Kiseki.Core.Services;
 
 public sealed class JitenApiClient : IJitenApiClient
 {
+    private const int MaxCatalogueItems = 1_000;
+    private const int MaxCataloguePages = 100;
     private static readonly Uri BaseAddress = new("https://api.jiten.moe/");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -116,6 +118,11 @@ public sealed class JitenApiClient : IJitenApiClient
     public async Task<JitenDeckDetailDTO?> GetDeckDetailAsync(
         int deckId,
         CancellationToken cancellationToken = default)
+        => (await GetDeckCatalogueAsync(deckId, cancellationToken)).Detail;
+
+    public async Task<JitenDeckCatalogueFetchResult> GetDeckCatalogueAsync(
+        int deckId,
+        CancellationToken cancellationToken = default)
     {
         if (deckId <= 0)
         {
@@ -126,30 +133,56 @@ public sealed class JitenApiClient : IJitenApiClient
 
         if (firstPage?.Data is null)
         {
-            return null;
+            return new(null, false, 0, 0, "Jiten could not find the requested deck.");
         }
 
         var detail = firstPage.Data;
+        var declaredChildren = Math.Max(detail.MainDeck?.ChildrenDeckCount ?? 0,
+            detail.ParentDeck?.ChildrenDeckCount ?? 0);
+        var expectedItems = Math.Max(firstPage.TotalItems, declaredChildren);
         var offset = firstPage.PageSize > 0
             ? firstPage.CurrentOffset + firstPage.PageSize
             : detail.SubDecks.Count;
 
-        while (detail.SubDecks.Count < firstPage.TotalItems && offset > 0)
+        var paginationStoppedEarly = expectedItems > MaxCatalogueItems;
+        var seenOffsets = new HashSet<int> { firstPage.CurrentOffset };
+        var pages = 1;
+        while (!paginationStoppedEarly && detail.SubDecks.Count < expectedItems && offset > 0)
         {
+            if (++pages > MaxCataloguePages || detail.SubDecks.Count >= MaxCatalogueItems)
+            {
+                paginationStoppedEarly = true;
+                break;
+            }
+            if (!seenOffsets.Add(offset))
+            {
+                paginationStoppedEarly = true;
+                break;
+            }
             var nextPage = await GetDeckDetailPageAsync(deckId, offset, cancellationToken);
 
             if (nextPage?.Data is null || nextPage.Data.SubDecks.Count == 0)
             {
+                paginationStoppedEarly = true;
                 break;
             }
+            expectedItems = Math.Max(expectedItems, nextPage.TotalItems);
 
-            detail.SubDecks.AddRange(nextPage.Data.SubDecks);
+            detail.SubDecks.AddRange(nextPage.Data.SubDecks.Take(MaxCatalogueItems - detail.SubDecks.Count));
             offset += nextPage.PageSize > 0
                 ? nextPage.PageSize
                 : nextPage.Data.SubDecks.Count;
         }
 
-        return detail;
+        var distinctItems = detail.SubDecks.Select(item => item.DeckId).Distinct().Count();
+        var isComplete = !paginationStoppedEarly && detail.SubDecks.Count >= expectedItems &&
+                         distinctItems == detail.SubDecks.Count;
+        return new(
+            detail,
+            isComplete,
+            expectedItems,
+            detail.SubDecks.Count,
+            isComplete ? null : "Jiten returned an incomplete set of catalogue pages; missing entries cannot be inferred.");
     }
 
     public async Task<JitenFranchiseDTO?> GetFranchiseAsync(

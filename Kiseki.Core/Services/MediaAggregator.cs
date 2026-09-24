@@ -25,17 +25,14 @@ public class MediaAggregator
         JitenDeckDTO? jitenDeck = (await _jitenApiClient.SearchBooksAsync(bookTitle))
             .FirstOrDefault();
 
-        var work = new MediaWork(bookTitle)
-        {
-            Title = bookTitle,
-            Logs = ttsuEntries
-                .Select(entry => entry.ToImmersionLog())
-                .ToList()
-        };
+        var work = MediaCatalogService.CreateDetachedTrackedCopy(bookTitle, MediaType.Book);
+        work.Logs = ttsuEntries
+            .Select(entry => entry.ToImmersionLog())
+            .ToList();
 
         if (jitenDeck is not null)
         {
-            JitenMediaSelection.FromDeck(jitenDeck).ApplyTo(work);
+            MediaCatalogService.LinkDetachedCopyToJiten(work, JitenMediaSelection.FromDeck(jitenDeck));
         }
 
         _works.Add(work);

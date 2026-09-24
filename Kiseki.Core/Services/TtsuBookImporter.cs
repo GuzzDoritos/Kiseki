@@ -8,7 +8,7 @@ public static class TtsuBookImporter
 {
     public static MediaWork CreateMediaWork(TtsuBookContainer book)
     {
-        var work = new MediaWork(book.Title.Trim(), mediaType: MediaType.Book);
+        var work = MediaCatalogService.CreateDetachedTrackedCopy(book.Title.Trim(), MediaType.Book);
         MergeInto(work, book);
         return work;
     }

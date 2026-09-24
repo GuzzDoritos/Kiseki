@@ -3,6 +3,7 @@ using System;
 using Kiseki.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Kiseki.Core.Migrations
 {
     [DbContext(typeof(ImmersionDbContext))]
-    partial class ImmersionDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260922202102_AddJitenCatalogueRefreshState")]
+    partial class AddJitenCatalogueRefreshState
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -234,100 +237,6 @@ namespace Kiseki.Core.Migrations
                             t.HasCheckConstraint("CK_JitenCatalogueRefreshReceipts_Deck", "\"JitenDeckId\" > 0");
 
                             t.HasCheckConstraint("CK_JitenCatalogueRefreshReceipts_Fingerprint", "length(trim(\"ReviewFingerprint\")) BETWEEN 1 AND 128");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseGraphNodeState", b =>
-                {
-                    b.Property<Guid>("FranchiseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("DeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LastProviderTitle")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<Guid?>("MediaSeriesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("ProviderMediaType")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Resolution")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValue(new Guid("00000000-0000-0000-0000-000000000000"));
-
-                    b.HasKey("FranchiseId", "DeckId");
-
-                    b.HasIndex("MediaSeriesId");
-
-                    b.ToTable("JitenFranchiseGraphNodeStates", t =>
-                        {
-                            t.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Deck", "\"DeckId\" > 0");
-
-                            t.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Fingerprint", "length(trim(\"ProviderFingerprint\")) BETWEEN 1 AND 128");
-
-                            t.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Resolution", "\"Resolution\" BETWEEN 1 AND 3");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseTopologyReceipt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AnchorDeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CreatedSeries")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("FranchiseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("IgnoredNodes")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LinkedSeries")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ReviewFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("UnresolvedNodes")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FranchiseId");
-
-                    b.ToTable("JitenFranchiseTopologyReceipts", t =>
-                        {
-                            t.HasCheckConstraint("CK_JitenFranchiseTopologyReceipts_Anchor", "\"AnchorDeckId\" > 0");
-
-                            t.HasCheckConstraint("CK_JitenFranchiseTopologyReceipts_Fingerprint", "length(trim(\"ReviewFingerprint\")) BETWEEN 1 AND 128");
                         });
                 });
 
@@ -649,33 +558,6 @@ namespace Kiseki.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("ProviderIdentity");
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseGraphNodeState", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.Franchise", "Franchise")
-                        .WithMany()
-                        .HasForeignKey("FranchiseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Kiseki.Core.Entities.MediaSeries", "MediaSeries")
-                        .WithMany()
-                        .HasForeignKey("MediaSeriesId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Franchise");
-
-                    b.Navigation("MediaSeries");
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseTopologyReceipt", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.Franchise", null)
-                        .WithMany()
-                        .HasForeignKey("FranchiseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Kiseki.Core.Entities.MediaInstallment", b =>
