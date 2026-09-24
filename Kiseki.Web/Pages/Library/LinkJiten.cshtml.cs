@@ -204,17 +204,11 @@ public sealed class LinkJitenModel(
                 return Page();
             }
 
-            await new MediaCatalogService(dbContext)
-                .LinkToJitenAsync(work, selection, Input.TitleChoice, cancellationToken);
+            selection.ApplyTo(work, Input.TitleChoice);
             await dbContext.SaveChangesAsync(cancellationToken);
 
             TempData["LibraryNotice"] = $"Linked “{work.Title}” to Jiten.";
             return RedirectToPage("/Library/Details", new { id = work.Id });
-        }
-        catch (MediaCatalogConflictException exception)
-        {
-            ModelState.AddModelError(string.Empty, exception.Message);
-            return Page();
         }
         catch (Exception exception) when (IsDisplayableJitenFailure(exception, cancellationToken))
         {

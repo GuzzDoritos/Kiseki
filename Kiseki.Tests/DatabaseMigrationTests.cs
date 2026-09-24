@@ -16,10 +16,6 @@ public class DatabaseMigrationTests
         var migrations = context.Database.GetMigrations().ToList();
 
         Assert.Contains("20260911135026_InitialPostgreSql", migrations);
-        Assert.Contains("20260921172122_AddCanonicalInstallments", migrations);
-        Assert.Contains(migrations, migration => migration.EndsWith("_AddJitenCatalogueRefreshState"));
-        Assert.Contains(migrations, migration => migration.EndsWith("_AddJitenFranchiseTopologyState"));
-        Assert.False(context.Database.HasPendingModelChanges());
     }
 
     [Fact]

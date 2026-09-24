@@ -44,11 +44,9 @@ public sealed class TtsuPostgreSqlTests
         await context.Database.MigrateAsync();
         Assert.False(context.Database.HasPendingModelChanges());
         var upgradedWork1 = await context.MediaWorks.AsNoTracking().SingleAsync(x => x.Id == workId);
-        Assert.Equal(workId, upgradedWork1.MediaInstallmentId);
         Assert.Equal("https://example.com/legacy-cover.jpg", upgradedWork1.CoverUrl);
         Assert.Equal(MediaCoverSource.LegacyUnknown, upgradedWork1.CoverSource);
         var upgradedWork2 = await context.MediaWorks.AsNoTracking().SingleAsync(x => x.Id == work2Id);
-        Assert.Equal(work2Id, upgradedWork2.MediaInstallmentId);
         Assert.Null(upgradedWork2.CoverUrl);
         Assert.Equal(MediaCoverSource.None, upgradedWork2.CoverSource);
         var logs = await context.ImmersionLogs.AsNoTracking().ToListAsync();
@@ -65,66 +63,6 @@ public sealed class TtsuPostgreSqlTests
         context.ChangeTracker.Clear();
         Assert.Equal(2, await context.ImmersionLogs.CountAsync());
         Assert.Equal(200, (await context.ImmersionLogs.SingleAsync(x => x.MediaWorkId == workId)).CharactersRead);
-    }
-
-    [PostgreSqlFact]
-    public async Task PostgreSql_CanonicalBackfillKeepsDuplicateProviderClaimsForReview()
-    {
-        await using var db = await PostgreSqlDatabase.CreateAsync();
-        await using var context = db.Context();
-        await context.GetService<IMigrator>().MigrateAsync("20260918184855_AddOpenLibraryCoverSourceAndConstraint");
-        var seriesId = Guid.NewGuid();
-        var standaloneId = Guid.NewGuid();
-        var uniqueId = Guid.NewGuid();
-        var duplicateOneId = Guid.NewGuid();
-        var duplicateTwoId = Guid.NewGuid();
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO \"MediaSeries\" (\"Id\", \"Title\", \"MediaType\") VALUES ({seriesId}, {"Series"}, {1})");
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"IsCompleted\", \"ManualCharacterCountOverride\") VALUES ({standaloneId}, {"Standalone"}, {1}, {false}, {0})");
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"MediaSeriesId\", \"JitenDeckId\", \"JitenSubdeckId\", \"JitenCharacterCount\", \"IsCompleted\") VALUES ({uniqueId}, {"Unique"}, {1}, {seriesId}, {10}, {11}, {90000}, {false})");
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"MediaSeriesId\", \"JitenDeckId\", \"JitenSubdeckId\", \"JitenCharacterCount\", \"IsCompleted\") VALUES ({duplicateOneId}, {"Duplicate A"}, {1}, {seriesId}, {20}, {21}, {70000}, {false})");
-        await context.Database.ExecuteSqlInterpolatedAsync(
-            $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"MediaSeriesId\", \"JitenDeckId\", \"JitenSubdeckId\", \"JitenCharacterCount\", \"IsCompleted\") VALUES ({duplicateTwoId}, {"Duplicate B"}, {1}, {seriesId}, {20}, {21}, {75000}, {false})");
-
-        await context.Database.MigrateAsync();
-        context.ChangeTracker.Clear();
-
-        Assert.Equal(4, await context.MediaInstallments.CountAsync());
-        Assert.All(await context.MediaWorks.AsNoTracking().ToListAsync(),
-            work => Assert.Equal(work.Id, work.MediaInstallmentId));
-        var identity = await context.InstallmentProviderIdentities.AsNoTracking().SingleAsync();
-        Assert.Equal("subdeck:10:11", identity.NormalizedKey);
-        Assert.Equal(uniqueId, identity.MediaInstallmentId);
-        Assert.DoesNotContain(await context.InstallmentProviderIdentities.AsNoTracking().ToListAsync(),
-            item => item.NormalizedKey == "subdeck:20:21");
-        Assert.Equal(90_000, (await context.MediaInstallments.AsNoTracking()
-            .SingleAsync(item => item.Id == uniqueId)).CanonicalCharacterCount);
-        Assert.Equal(0, (await context.MediaWorks.AsNoTracking()
-            .SingleAsync(work => work.Id == standaloneId)).ManualCharacterCountOverride);
-    }
-
-    [PostgreSqlFact]
-    public async Task PostgreSql_ConcurrentCanonicalMigrationCreatesOneInstallmentPerWork()
-    {
-        await using var db = await PostgreSqlDatabase.CreateAsync();
-        var workId = Guid.NewGuid();
-        await using (var setup = db.Context())
-        {
-            await setup.GetService<IMigrator>().MigrateAsync("20260918184855_AddOpenLibraryCoverSourceAndConstraint");
-            await setup.Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"IsCompleted\") VALUES ({workId}, {"Concurrent"}, {1}, {false})");
-        }
-
-        await using var first = db.Context();
-        await using var second = db.Context();
-        await Task.WhenAll(first.Database.MigrateAsync(), second.Database.MigrateAsync());
-
-        await using var verify = db.Context();
-        Assert.Single(await verify.MediaInstallments.AsNoTracking().ToListAsync());
-        Assert.Equal(workId, (await verify.MediaWorks.AsNoTracking().SingleAsync()).MediaInstallmentId);
     }
 
     [PostgreSqlFact]

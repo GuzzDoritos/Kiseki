@@ -9,32 +9,24 @@
 </nav>
 
 <div class="page-header compact">
-    <div>
-        <p class="eyebrow">Organization</p>
-        <h1>Create series</h1>
-        <p class="page-description">Create a container for grouping installments of a specific media type.</p>
-    </div>
+    <div><p class="eyebrow">Organization</p><h1>Create series</h1></div>
 </div>
 
 <section class="content-card form-card">
+    <div class="scaffold-notice">This form is ready for the upcoming series application service.</div>
     <form method="post">
-        @Html.AntiForgeryToken()
-        <div asp-validation-summary="ModelOnly" class="form-error-summary mb-3" role="alert"></div>
-
         <div class="form-stack">
             <div>
-                <label class="form-label" asp-for="Input.Title">Title</label>
-                <input class="form-control" asp-for="Input.Title" placeholder="e.g. Re:Zero Light Novels" autofocus />
-                <span asp-validation-for="Input.Title" class="form-field-error"></span>
+                <label class="form-label" asp-for="Input.Title"></label>
+                <input class="form-control" asp-for="Input.Title" placeholder="e.g. Re:Zero Light Novels" />
             </div>
             <div>
-                <label class="form-label" asp-for="Input.MediaType">Media type</label>
-                <select class="form-select" asp-for="Input.MediaType" asp-items="Html.GetEnumSelectList<Kiseki.Core.Entities.MediaType>()"></select>
-                <span asp-validation-for="Input.MediaType" class="form-field-error"></span>
+                <label class="form-label" asp-for="Input.MediaType"></label>
+                <select class="form-select" asp-for="Input.MediaType" asp-items="Html.GetEnumSelectList<MediaType>()"></select>
             </div>
         </div>
-        <div class="form-actions mt-4">
-            <button class="btn btn-primary" type="submit">Create series</button>
+        <div class="form-actions">
+            <button class="btn btn-primary" type="submit" disabled>Create series</button>
             <a class="btn btn-link" asp-page="/Series/Index">Cancel</a>
         </div>
     </form>

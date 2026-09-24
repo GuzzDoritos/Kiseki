@@ -103,7 +103,7 @@ public sealed record MediaWorkDetailsViewModel(
             work.Id,
             work.Title,
             work.MediaType,
-            work.MediaInstallment?.MediaSeries?.Title ?? work.MediaSeries?.Title,
+            work.MediaSeries?.Title,
             work.JitenDeckId,
             work.JitenSubdeckId,
             work.JitenCharacterCount,

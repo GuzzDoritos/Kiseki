@@ -83,348 +83,6 @@ namespace Kiseki.Core.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Kiseki.Core.Entities.InstallmentProviderIdentity", b =>
-                {
-                    b.Property<string>("Provider")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("NormalizedKey")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTimeOffset?>("LastSeenAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("MediaInstallmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset?>("MissingSinceUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("ParentProviderItemId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ProviderItemId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Provider", "NormalizedKey");
-
-                    b.HasIndex("MediaInstallmentId");
-
-                    b.ToTable("InstallmentProviderIdentities", t =>
-                        {
-                            t.HasCheckConstraint("CK_InstallmentProviderIdentities_ItemIds", "\"ProviderItemId\" > 0 AND (\"ParentProviderItemId\" IS NULL OR \"ParentProviderItemId\" > 0)");
-
-                            t.HasCheckConstraint("CK_InstallmentProviderIdentities_Keys", "length(trim(\"Provider\")) BETWEEN 1 AND 64 AND length(trim(\"NormalizedKey\")) BETWEEN 1 AND 256");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.InstallmentProviderSnapshot", b =>
-                {
-                    b.Property<string>("Provider")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("NormalizedKey")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("Fingerprint")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int?>("CharacterCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CoverSource")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("CoverUrl")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<bool>("IsComplete")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTimeOffset?>("ObservedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PayloadJson")
-                        .HasColumnType("text");
-
-                    b.Property<int?>("ProviderOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly?>("ReleaseDate")
-                        .HasColumnType("date");
-
-                    b.Property<int>("ReleaseState")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValue(new Guid("00000000-0000-0000-0000-000000000000"));
-
-                    b.HasKey("Provider", "NormalizedKey", "Fingerprint");
-
-                    b.HasIndex("Provider", "NormalizedKey", "ObservedAtUtc");
-
-                    b.ToTable("InstallmentProviderSnapshots", t =>
-                        {
-                            t.HasCheckConstraint("CK_InstallmentProviderSnapshots_CharacterCount", "\"CharacterCount\" IS NULL OR \"CharacterCount\" >= 0");
-
-                            t.HasCheckConstraint("CK_InstallmentProviderSnapshots_Cover", "(\"CoverUrl\" IS NULL AND \"CoverSource\" = 0) OR (\"CoverUrl\" IS NOT NULL AND \"CoverSource\" <> 0)");
-
-                            t.HasCheckConstraint("CK_InstallmentProviderSnapshots_Enums", "\"CoverSource\" BETWEEN 0 AND 3 AND \"ReleaseState\" BETWEEN 0 AND 2");
-
-                            t.HasCheckConstraint("CK_InstallmentProviderSnapshots_Fingerprint", "length(trim(\"Fingerprint\")) BETWEEN 1 AND 128");
-
-                            t.HasCheckConstraint("CK_InstallmentProviderSnapshots_ProviderOrder", "\"ProviderOrder\" IS NULL OR \"ProviderOrder\" >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenCatalogueRefreshReceipt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AddedInstallments")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Ignored")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("JitenDeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LinkedIdentities")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("MarkedMissing")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("MediaSeriesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ReviewFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("UpdatedInstallments")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MediaSeriesId");
-
-                    b.ToTable("JitenCatalogueRefreshReceipts", t =>
-                        {
-                            t.HasCheckConstraint("CK_JitenCatalogueRefreshReceipts_Deck", "\"JitenDeckId\" > 0");
-
-                            t.HasCheckConstraint("CK_JitenCatalogueRefreshReceipts_Fingerprint", "length(trim(\"ReviewFingerprint\")) BETWEEN 1 AND 128");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseGraphNodeState", b =>
-                {
-                    b.Property<Guid>("FranchiseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("DeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LastProviderTitle")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<Guid?>("MediaSeriesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ProviderFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("ProviderMediaType")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Resolution")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValue(new Guid("00000000-0000-0000-0000-000000000000"));
-
-                    b.HasKey("FranchiseId", "DeckId");
-
-                    b.HasIndex("MediaSeriesId");
-
-                    b.ToTable("JitenFranchiseGraphNodeStates", t =>
-                        {
-                            t.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Deck", "\"DeckId\" > 0");
-
-                            t.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Fingerprint", "length(trim(\"ProviderFingerprint\")) BETWEEN 1 AND 128");
-
-                            t.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Resolution", "\"Resolution\" BETWEEN 1 AND 3");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseTopologyReceipt", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AnchorDeckId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("CreatedSeries")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("FranchiseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("IgnoredNodes")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("LinkedSeries")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ReviewFingerprint")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<int>("UnresolvedNodes")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FranchiseId");
-
-                    b.ToTable("JitenFranchiseTopologyReceipts", t =>
-                        {
-                            t.HasCheckConstraint("CK_JitenFranchiseTopologyReceipts_Anchor", "\"AnchorDeckId\" > 0");
-
-                            t.HasCheckConstraint("CK_JitenFranchiseTopologyReceipts_Fingerprint", "length(trim(\"ReviewFingerprint\")) BETWEEN 1 AND 128");
-                        });
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.MediaInstallment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("CanonicalCharacterCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CanonicalCoverSource")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("CanonicalCoverUrl")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<string>("CanonicalTitle")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<int?>("CharacterCountOverride")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsIncluded")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<int>("Kind")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LegacyTitle")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<Guid?>("MediaSeriesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("MediaType")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1);
-
-                    b.Property<int>("OrderKey")
-                        .HasColumnType("integer");
-
-                    b.Property<DateOnly?>("ReleaseDate")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly?>("ReleaseDateOverride")
-                        .HasColumnType("date");
-
-                    b.Property<int>("ReleaseState")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ReleaseStateOverride")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("TitleOverride")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
-
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValue(new Guid("00000000-0000-0000-0000-000000000000"));
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MediaSeriesId", "OrderKey");
-
-                    b.ToTable("MediaInstallments", t =>
-                        {
-                            t.HasCheckConstraint("CK_MediaInstallments_CanonicalCharacterCount", "\"CanonicalCharacterCount\" IS NULL OR \"CanonicalCharacterCount\" > 0");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_CanonicalCover", "(\"CanonicalCoverUrl\" IS NULL AND \"CanonicalCoverSource\" = 0) OR (\"CanonicalCoverUrl\" IS NOT NULL AND \"CanonicalCoverSource\" <> 0)");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_CanonicalCoverSource", "\"CanonicalCoverSource\" BETWEEN 0 AND 3");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_CharacterCountOverride", "\"CharacterCountOverride\" IS NULL OR \"CharacterCountOverride\" > 0");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_Kind", "\"Kind\" BETWEEN 0 AND 7");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_MediaType", "\"MediaType\" IN (1, 2, 3)");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_OrderKey", "\"OrderKey\" >= 0");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_ReleaseState", "\"ReleaseState\" BETWEEN 0 AND 2 AND (\"ReleaseStateOverride\" IS NULL OR \"ReleaseStateOverride\" BETWEEN 0 AND 2)");
-
-                            t.HasCheckConstraint("CK_MediaInstallments_Title", "coalesce(length(trim(\"LegacyTitle\")), 0) > 0 OR coalesce(length(trim(\"CanonicalTitle\")), 0) > 0 OR coalesce(length(trim(\"TitleOverride\")), 0) > 0");
-                        });
-                });
-
             modelBuilder.Entity("Kiseki.Core.Entities.MediaSeries", b =>
                 {
                     b.Property<Guid>("Id")
@@ -487,9 +145,6 @@ namespace Kiseki.Core.Migrations
                     b.Property<int?>("ManualCharacterCountOverride")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("MediaInstallmentId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("MediaSeriesId")
                         .HasColumnType("uuid");
 
@@ -505,19 +160,11 @@ namespace Kiseki.Core.Migrations
                     b.Property<int?>("TtsuCharacterCount")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValue(new Guid("00000000-0000-0000-0000-000000000000"));
-
                     b.HasKey("Id");
 
                     b.HasIndex("JitenDeckId");
 
                     b.HasIndex("JitenSubdeckId");
-
-                    b.HasIndex("MediaInstallmentId");
 
                     b.HasIndex("MediaSeriesId");
 
@@ -629,65 +276,6 @@ namespace Kiseki.Core.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
-            modelBuilder.Entity("Kiseki.Core.Entities.InstallmentProviderIdentity", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.MediaInstallment", "MediaInstallment")
-                        .WithMany("ProviderIdentities")
-                        .HasForeignKey("MediaInstallmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MediaInstallment");
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.InstallmentProviderSnapshot", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.InstallmentProviderIdentity", "ProviderIdentity")
-                        .WithMany("Snapshots")
-                        .HasForeignKey("Provider", "NormalizedKey")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ProviderIdentity");
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseGraphNodeState", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.Franchise", "Franchise")
-                        .WithMany()
-                        .HasForeignKey("FranchiseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Kiseki.Core.Entities.MediaSeries", "MediaSeries")
-                        .WithMany()
-                        .HasForeignKey("MediaSeriesId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Franchise");
-
-                    b.Navigation("MediaSeries");
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.JitenFranchiseTopologyReceipt", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.Franchise", null)
-                        .WithMany()
-                        .HasForeignKey("FranchiseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.MediaInstallment", b =>
-                {
-                    b.HasOne("Kiseki.Core.Entities.MediaSeries", "MediaSeries")
-                        .WithMany("Installments")
-                        .HasForeignKey("MediaSeriesId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("MediaSeries");
-                });
-
             modelBuilder.Entity("Kiseki.Core.Entities.MediaSeries", b =>
                 {
                     b.HasOne("Kiseki.Core.Entities.Franchise", "Franchise")
@@ -700,17 +288,10 @@ namespace Kiseki.Core.Migrations
 
             modelBuilder.Entity("Kiseki.Core.Entities.MediaWork", b =>
                 {
-                    b.HasOne("Kiseki.Core.Entities.MediaInstallment", "MediaInstallment")
-                        .WithMany("Copies")
-                        .HasForeignKey("MediaInstallmentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("Kiseki.Core.Entities.MediaSeries", "MediaSeries")
                         .WithMany("Works")
                         .HasForeignKey("MediaSeriesId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("MediaInstallment");
 
                     b.Navigation("MediaSeries");
                 });
@@ -729,22 +310,8 @@ namespace Kiseki.Core.Migrations
                     b.Navigation("Series");
                 });
 
-            modelBuilder.Entity("Kiseki.Core.Entities.InstallmentProviderIdentity", b =>
-                {
-                    b.Navigation("Snapshots");
-                });
-
-            modelBuilder.Entity("Kiseki.Core.Entities.MediaInstallment", b =>
-                {
-                    b.Navigation("Copies");
-
-                    b.Navigation("ProviderIdentities");
-                });
-
             modelBuilder.Entity("Kiseki.Core.Entities.MediaSeries", b =>
                 {
-                    b.Navigation("Installments");
-
                     b.Navigation("Works");
                 });
 

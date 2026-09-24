@@ -98,25 +98,6 @@
             {
                 var book = Model.Books[index];
                 var plan = book.Plan;
-                var targetReview = plan.TargetReview;
-                var currentIntent = Model.Selections[index].CopyIntent;
-                var currentTargetId = Model.Selections[index].TargetId;
-                var currentInstallmentId = Model.Selections[index].InstallmentId;
-
-                string? suggestedTargetTitle = null;
-                if (targetReview?.SuggestedChoice is { } suggestedChoice)
-                {
-                    if (suggestedChoice.Intent == TtsuCopyIntent.ExistingCopy && suggestedChoice.WorkId is Guid workId)
-                    {
-                        suggestedTargetTitle = Model.Targets.FirstOrDefault(t => t.Id == workId)?.Title
-                            ?? targetReview.CopyCandidates.FirstOrDefault(c => c.WorkId == workId)?.Title;
-                    }
-                    else if (suggestedChoice.Intent == TtsuCopyIntent.NewCopyUnderExistingInstallment && suggestedChoice.InstallmentId is Guid instId)
-                    {
-                        suggestedTargetTitle = Model.InstallmentTargets.FirstOrDefault(i => i.Id == instId)?.Title
-                            ?? targetReview.InstallmentCandidates.FirstOrDefault(i => i.InstallmentId == instId)?.Title;
-                    }
-                }
                 <article class="content-card ttsu-book-preview">
                     <input type="hidden" asp-for="Selections[index].BookKey" />
                     <input type="hidden" asp-for="Selections[index].ReviewToken" />
@@ -145,225 +126,17 @@
                             </div>
                         </div>
                     </div>
-                    <div class="ttsu-import-mode ttsu-target-selection" data-ttsu-target-selection data-book-index="@index">
-                        <input type="hidden" asp-for="Selections[index].Mode" id="mode_input_@index" data-ttsu-mode-input />
-
-                        <fieldset class="ttsu-target-fieldset" aria-labelledby="target_legend_@index">
-                            <legend class="ttsu-target-legend" id="target_legend_@index">
-                                <span>Target installment &amp; copy</span>
-                            </legend>
-
-                            @if (targetReview?.IsAmbiguous == true)
-                            {
-                                <div class="ttsu-target-callout ttsu-target-ambiguous" role="alert" aria-live="polite">
-                                    <div class="ttsu-callout-header">
-                                        <svg class="ttsu-callout-icon" aria-hidden="true" viewBox="0 0 24 24" width="16" height="16">
-                                            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-                                        </svg>
-                                        <strong>Ambiguous target</strong>
-                                    </div>
-                                    <p class="ttsu-callout-text">@targetReview.Reason</p>
-                                    <p class="ttsu-callout-hint">Choose an existing copy or catalogue installment below, then click <strong>Refresh review</strong>.</p>
-                                </div>
-                            }
-                            else if (targetReview?.SuggestedChoice is not null)
-                            {
-                                <div class="ttsu-target-callout ttsu-target-suggested">
-                                    <span class="ttsu-badge ttsu-badge-suggested">Suggested</span>
-                                    <span class="ttsu-suggested-text">
-                                        @if (targetReview.SuggestedChoice.Intent == TtsuCopyIntent.NewCopyUnderExistingInstallment && !string.IsNullOrWhiteSpace(suggestedTargetTitle))
-                                        {
-                                            <strong>New copy under @suggestedTargetTitle</strong>
-                                        }
-                                        else if (targetReview.SuggestedChoice.Intent == TtsuCopyIntent.ExistingCopy && !string.IsNullOrWhiteSpace(suggestedTargetTitle))
-                                        {
-                                            <strong>Update @suggestedTargetTitle</strong>
-                                        }
-                                        else if (targetReview.SuggestedChoice.Intent == TtsuCopyIntent.NewInstallmentAndCopy)
-                                        {
-                                            <strong>New standalone installment &amp; copy</strong>
-                                        }
-                                        — @targetReview.Reason
-                                    </span>
-                                </div>
-                            }
-                            else if (!string.IsNullOrWhiteSpace(targetReview?.Reason))
-                            {
-                                <div class="ttsu-target-callout ttsu-target-info">
-                                    <span class="ttsu-suggested-text">@targetReview.Reason</span>
-                                </div>
-                            }
-
-                            <div class="ttsu-intent-options" role="radiogroup" aria-labelledby="target_legend_@index">
-                                <!-- Option 1: Existing copy -->
-                                <div class="ttsu-intent-option @(currentIntent == TtsuCopyIntent.ExistingCopy ? "is-selected" : "")" data-ttsu-option-card="ExistingCopy">
-                                    <div class="form-check ttsu-intent-radio-wrap">
-                                        <input class="form-check-input" type="radio"
-                                               name="Selections[@index].CopyIntent"
-                                               id="intent_existing_@index"
-                                               value="@TtsuCopyIntent.ExistingCopy"
-                                               @(currentIntent == TtsuCopyIntent.ExistingCopy ? "checked" : "")
-                                               data-ttsu-intent-radio
-                                               data-intent="ExistingCopy"
-                                               data-index="@index"
-                                               aria-describedby="intent_existing_desc_@index" />
-                                        <label class="form-check-label ttsu-intent-label" for="intent_existing_@index">
-                                            <span class="ttsu-intent-title">Update existing copy</span>
-                                            <span class="ttsu-intent-desc" id="intent_existing_desc_@index">Merge reading sessions into an existing tracked book in your library.</span>
-                                        </label>
-                                    </div>
-                                    <div class="ttsu-intent-dropdown-wrap" id="wrap_existing_@index" style="@(currentIntent == TtsuCopyIntent.ExistingCopy ? "" : "display: none;")">
-                                        <label for="select_target_@index" class="form-label">Existing book to update</label>
-                                        <select class="form-select" id="select_target_@index" name="Selections[@index].TargetId" data-ttsu-target-select data-index="@index"
-                                                disabled="@(currentIntent != TtsuCopyIntent.ExistingCopy ? "disabled" : null)">
-                                            <option value="">Choose an existing copy...</option>
-                                            @foreach (var target in Model.Targets)
-                                            {
-                                                var candidate = targetReview?.CopyCandidates.FirstOrDefault(c => c.WorkId == target.Id);
-                                                var isSelected = currentTargetId == target.Id;
-                                                string optionText;
-                                                if (candidate is not null)
-                                                {
-                                                    if (candidate.HasBinding && !candidate.BindingMatchesSource)
-                                                    {
-                                                        optionText = $"{target.Title} — {candidate.LifetimeCharacters:N0} chars (Bound to another source — conflict)";
-                                                    }
-                                                    else if (candidate.HasBinding)
-                                                    {
-                                                        optionText = $"{target.Title} — {candidate.LifetimeCharacters:N0} chars (Bound to this source)";
-                                                    }
-                                                    else
-                                                    {
-                                                        optionText = $"{target.Title} — {candidate.LifetimeCharacters:N0} chars (Unbound)";
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    optionText = $"{target.Title} ({target.Id.ToString()[..8]})";
-                                                }
-                                                <option value="@target.Id" selected="@(isSelected ? "selected" : null)">@optionText</option>
-                                            }
-                                        </select>
-                                        @if (targetReview?.CopyCandidates.Count > 0)
-                                        {
-                                            <div class="ttsu-candidate-breakdown">
-                                                <span class="ttsu-candidate-label">Detected copies:</span>
-                                                <ul class="ttsu-candidate-chips">
-                                                    @foreach (var cand in targetReview.CopyCandidates)
-                                                    {
-                                                        <li class="ttsu-candidate-chip @(cand.HasBinding && !cand.BindingMatchesSource ? "chip-conflict" : "")">
-                                                            <span class="chip-title">@cand.Title</span>
-                                                            <span class="chip-chars">@cand.LifetimeCharacters.ToString("N0") chars</span>
-                                                            @if (cand.HasBinding && !cand.BindingMatchesSource)
-                                                            {
-                                                                <span class="ttsu-badge ttsu-badge-conflict">Bound to another source (conflict)</span>
-                                                            }
-                                                            else if (cand.HasBinding)
-                                                            {
-                                                                <span class="ttsu-badge ttsu-badge-bound">Bound to this source</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <span class="ttsu-badge ttsu-badge-unbound">Unbound</span>
-                                                            }
-                                                        </li>
-                                                    }
-                                                </ul>
-                                            </div>
-                                        }
-                                    </div>
-                                </div>
-
-                                <!-- Option 2: New copy under existing catalogue installment -->
-                                <div class="ttsu-intent-option @(currentIntent == TtsuCopyIntent.NewCopyUnderExistingInstallment ? "is-selected" : "")" data-ttsu-option-card="NewCopyUnderExistingInstallment">
-                                    <div class="form-check ttsu-intent-radio-wrap">
-                                        <input class="form-check-input" type="radio"
-                                               name="Selections[@index].CopyIntent"
-                                               id="intent_newcopy_@index"
-                                               value="@TtsuCopyIntent.NewCopyUnderExistingInstallment"
-                                               @(currentIntent == TtsuCopyIntent.NewCopyUnderExistingInstallment ? "checked" : "")
-                                               data-ttsu-intent-radio
-                                               data-intent="NewCopyUnderExistingInstallment"
-                                               data-index="@index"
-                                               aria-describedby="intent_newcopy_desc_@index" />
-                                        <label class="form-check-label ttsu-intent-label" for="intent_newcopy_@index">
-                                            <span class="ttsu-intent-title">New copy under existing installment</span>
-                                            <span class="ttsu-intent-desc" id="intent_newcopy_desc_@index">Track a separate edition or reread under an existing catalogue volume.</span>
-                                        </label>
-                                    </div>
-                                    <div class="ttsu-intent-dropdown-wrap" id="wrap_newcopy_@index" style="@(currentIntent == TtsuCopyIntent.NewCopyUnderExistingInstallment ? "" : "display: none;")">
-                                        <label for="select_installment_@index" class="form-label">Catalogue installment</label>
-                                        <select class="form-select" id="select_installment_@index" name="Selections[@index].InstallmentId" data-ttsu-installment-select data-index="@index"
-                                                disabled="@(currentIntent != TtsuCopyIntent.NewCopyUnderExistingInstallment ? "disabled" : null)">
-                                            <option value="">Choose a catalogue installment...</option>
-                                            @foreach (var inst in Model.InstallmentTargets)
-                                            {
-                                                var candidate = targetReview?.InstallmentCandidates.FirstOrDefault(i => i.InstallmentId == inst.Id);
-                                                var isSelected = currentInstallmentId == inst.Id;
-                                                string optionText;
-                                                if (candidate is not null)
-                                                {
-                                                    var countLabel = candidate.CopyCount == 0 ? "Catalogue only (0 copies)" : $"{candidate.CopyCount} copies ({candidate.UnboundCopyCount} unbound)";
-                                                    var prov = candidate.ProviderKeys.Count > 0 ? $" [{string.Join(", ", candidate.ProviderKeys)}]" : "";
-                                                    optionText = $"{inst.Title} — {countLabel}{prov}";
-                                                }
-                                                else
-                                                {
-                                                    var countLabel = inst.CopyCount == 0 ? "Catalogue only (0 copies)" : $"{inst.CopyCount} copies";
-                                                    optionText = $"{inst.Title} — {countLabel}";
-                                                }
-                                                <option value="@inst.Id" selected="@(isSelected ? "selected" : null)">@optionText</option>
-                                            }
-                                        </select>
-                                        @if (targetReview?.InstallmentCandidates.Count > 0)
-                                        {
-                                            <div class="ttsu-candidate-breakdown">
-                                                <span class="ttsu-candidate-label">Matched catalogue installments:</span>
-                                                <ul class="ttsu-candidate-chips">
-                                                    @foreach (var instCand in targetReview.InstallmentCandidates)
-                                                    {
-                                                        <li class="ttsu-candidate-chip">
-                                                            <span class="chip-title">@instCand.Title</span>
-                                                            @if (instCand.CopyCount == 0)
-                                                            {
-                                                                <span class="ttsu-badge ttsu-badge-catalogue-only">Catalogue only (0 copies)</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <span class="ttsu-badge ttsu-badge-tracked">@instCand.CopyCount @(instCand.CopyCount == 1 ? "copy" : "copies")</span>
-                                                            }
-                                                            @if (instCand.ProviderKeys.Count > 0)
-                                                            {
-                                                                <span class="chip-prov">@string.Join(", ", instCand.ProviderKeys)</span>
-                                                            }
-                                                        </li>
-                                                    }
-                                                </ul>
-                                            </div>
-                                        }
-                                    </div>
-                                </div>
-
-                                <!-- Option 3: New installment and copy -->
-                                <div class="ttsu-intent-option @(currentIntent == TtsuCopyIntent.NewInstallmentAndCopy ? "is-selected" : "")" data-ttsu-option-card="NewInstallmentAndCopy">
-                                    <div class="form-check ttsu-intent-radio-wrap">
-                                        <input class="form-check-input" type="radio"
-                                               name="Selections[@index].CopyIntent"
-                                               id="intent_newinst_@index"
-                                               value="@TtsuCopyIntent.NewInstallmentAndCopy"
-                                               @(currentIntent == TtsuCopyIntent.NewInstallmentAndCopy ? "checked" : "")
-                                               data-ttsu-intent-radio
-                                               data-intent="NewInstallmentAndCopy"
-                                               data-index="@index"
-                                               aria-describedby="intent_newinst_desc_@index" />
-                                        <label class="form-check-label ttsu-intent-label" for="intent_newinst_@index">
-                                            <span class="ttsu-intent-title">New installment &amp; copy</span>
-                                            <span class="ttsu-intent-desc" id="intent_newinst_desc_@index">Creates a new standalone installment and copy in your library.</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </fieldset>
+                    <div class="ttsu-import-mode">
+                        <label asp-for="Selections[index].Mode">Import behavior</label>
+                        <select class="form-select" asp-for="Selections[index].Mode">
+                            <option value="Merge">Update existing work</option><option value="Create">Create a new copy</option>
+                        </select>
+                        <label asp-for="Selections[index].TargetId">Existing book to update</label>
+                        <select class="form-select" asp-for="Selections[index].TargetId">
+                            <option value="">Choose a book</option>
+                            @foreach (var target in Model.Targets) { <option value="@target.Id">@target.Title (@target.Id.ToString()[..8])</option> }
+                        </select>
+                        <p class="form-text">A new copy keeps its own history. If multiple copies match a later export, you will choose which one to update.</p>
                     </div>
                     @if (plan.Error is not null) { <p class="import-warnings">@plan.Error</p> }
                     <dl class="ttsu-book-stats">
@@ -670,16 +443,10 @@
                 </article>
             }
             </div>
-            @{
-                var hasBlockingErrors = Model.Books.Where((b, i) => i < Model.Selections.Count && Model.Selections[i].Selected).Any(b => !b.Plan.CanApply);
-                var hasSelected = Model.Selections.Any(s => s.Selected);
-                var canConfirm = !Model.IsEnrichmentActive && hasSelected && !hasBlockingErrors;
-            }
             <div class="form-actions ttsu-confirm-actions">
-                <button class="btn btn-outline-secondary" type="submit" asp-page-handler="Review" data-ttsu-action-btn data-ttsu-review-btn disabled="@(Model.IsEnrichmentActive ? "disabled" : null)">Refresh review</button>
-                <button class="btn btn-primary" type="submit" data-ttsu-action-btn data-ttsu-confirm-btn disabled="@(!canConfirm ? "disabled" : null)">Confirm selected books</button>
-                <button class="btn btn-outline-secondary" type="submit" asp-page-handler="Cancel" formnovalidate>Cancel</button>
-                <span class="ttsu-confirm-hint text-warning" data-ttsu-confirm-hint role="status" style="@(hasBlockingErrors ? "" : "display: none;")">Some selections require review or have unresolved conflicts. Select <strong>Refresh review</strong> before confirming.</span>
+                <button class="btn btn-outline-secondary" type="submit" asp-page-handler="Review" data-ttsu-action-btn disabled="@(Model.IsEnrichmentActive ? "disabled" : null)">Refresh review</button>
+                <button class="btn btn-primary" type="submit" data-ttsu-action-btn disabled="@(Model.IsEnrichmentActive ? "disabled" : null)">Confirm selected books</button>
+                <button class="btn btn-link" type="submit" asp-page-handler="Cancel" formnovalidate>Cancel</button>
             </div>
         </form>
     </section>

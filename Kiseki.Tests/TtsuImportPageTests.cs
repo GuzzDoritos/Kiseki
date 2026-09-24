@@ -1900,65 +1900,6 @@ public sealed class TtsuImportPageTests
         return JitenMatchOutcome.Matched(correlationId, result);
     }
 
-    [Fact]
-    public async Task Confirm_ExactCatalogueIdentity_CreatesCopyUnderExistingInstallment()
-    {
-        await using var database = await TestDatabase.CreateAsync();
-        var installment = new MediaInstallment("Test Book", MediaType.Book);
-        installment.ProviderIdentities.Add(new InstallmentProviderIdentity
-        {
-            Provider = "jiten",
-            NormalizedKey = "subdeck:10:15",
-            MediaInstallment = installment,
-            ProviderItemId = 15,
-            ParentProviderItemId = 10
-        });
-        database.Context.MediaInstallments.Add(installment);
-        await database.Context.SaveChangesAsync();
-
-        var candidate = CreateCandidate(10, subdeckId: 15, title: "Test Book");
-        var matchService = new StubJitenMatchService
-        {
-            Handler = (requests, _, _) => Task.FromResult<IReadOnlyList<JitenMatchOutcome>>([
-                CreateMatchedOutcome(requests.Single().CorrelationId, MatchConfidence.High, CreateScored(candidate))
-            ])
-        };
-        var resolver = new StubJitenSelectionResolver
-        {
-            Handler = (deckId, subdeckId, _) => Task.FromResult(JitenSelectionResult.Succeeded(
-                new JitenMediaSelection(
-                    deckId,
-                    subdeckId,
-                    "Test Book",
-                    string.Empty,
-                    string.Empty,
-                    50_000,
-                    null,
-                    0)))
-        };
-
-        using var fixture = File.OpenRead(GetFixturePath());
-        var model = CreateModel(database.Context, matchService, resolver);
-        model.AutoMatchMetadata = true;
-        model.FolderFiles = [StatisticsFile(fixture)];
-        await model.OnPostPreviewAsync(CancellationToken.None);
-        await EnrichAllPendingAsync(model);
-
-        Assert.Equal(TtsuCopyIntent.NewCopyUnderExistingInstallment, model.Selections.Single().CopyIntent);
-        Assert.Equal(installment.Id, model.Selections.Single().InstallmentId);
-        Assert.Equal(installment.Id, model.Books.Single().Plan.TargetReview!.SuggestedChoice!.InstallmentId);
-
-        var result = await model.OnPostConfirmAsync(CancellationToken.None);
-
-        Assert.IsType<RedirectToPageResult>(result);
-        database.Context.ChangeTracker.Clear();
-        Assert.Single(await database.Context.MediaInstallments.ToListAsync());
-        var copy = await database.Context.MediaWorks.Include(work => work.Logs).SingleAsync();
-        Assert.Equal(installment.Id, copy.MediaInstallmentId);
-        Assert.Equal(2, copy.Logs.Count);
-        Assert.NotNull(await database.Context.TtsuBindings.SingleOrDefaultAsync(binding => binding.MediaWorkId == copy.Id));
-    }
-
     private static TtsuModel CreateModel(
         ImmersionDbContext context,
         StubJitenMatchService? matchService = null,

@@ -1,7 +1,6 @@
 using Kiseki.Console.Display;
 using Kiseki.Core;
 using Kiseki.Core.Entities;
-using Kiseki.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Spectre.Console;
 
@@ -62,8 +61,6 @@ public sealed class LibraryScreen
         return _context.MediaWorks
             .Include(mediaWork => mediaWork.Logs)
             .Include(mediaWork => mediaWork.MediaSeries)
-            .Include(mediaWork => mediaWork.MediaInstallment)
-                .ThenInclude(installment => installment!.MediaSeries)
             .OrderBy(mediaWork => mediaWork.MediaType)
             .ThenBy(mediaWork => mediaWork.MediaSeries != null
                 ? mediaWork.MediaSeries.Title
@@ -106,16 +103,7 @@ public sealed class LibraryScreen
                 return;
             }
 
-            bool changed;
-            try
-            {
-                changed = await EditFieldAsync(mediaWork, field);
-            }
-            catch (MediaCatalogConflictException exception)
-            {
-                AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(exception.Message)}[/]");
-                continue;
-            }
+            var changed = await EditFieldAsync(mediaWork, field);
 
             if (changed)
             {
@@ -139,8 +127,13 @@ public sealed class LibraryScreen
                         .Title("Select the [green]media type[/]:")
                         .AddChoices(Enum.GetValues<MediaType>()));
 
-                await new MediaCatalogService(_context)
-                    .ChangeCopyMediaTypeAsync(mediaWork, mediaType);
+                if (mediaWork.MediaSeries?.MediaType != mediaType)
+                {
+                    mediaWork.MediaSeries = null;
+                    mediaWork.MediaSeriesId = null;
+                }
+
+                mediaWork.MediaType = mediaType;
                 return true;
 
             case "Series":
@@ -161,7 +154,7 @@ public sealed class LibraryScreen
                     return false;
                 }
 
-                await new MediaCatalogService(_context).UnlinkFromJitenAsync(mediaWork);
+                mediaWork.RemoveJitenLink();
                 return true;
 
             case "Manual character override":
@@ -204,7 +197,7 @@ public sealed class LibraryScreen
             return false;
         }
 
-        await new MediaCatalogService(_context).LinkToJitenAsync(mediaWork, selection);
+        selection.ApplyTo(mediaWork);
 
         if (selection.IsSubdeck && mediaWork.MediaSeries is not null &&
             mediaWork.MediaSeries.JitenDeckId is null &&
@@ -242,7 +235,7 @@ public sealed class LibraryScreen
             var title = PromptForTitle(mediaWork.Title);
             var newSeries = new MediaSeries(title, mediaWork.MediaType);
             _context.MediaSeries.Add(newSeries);
-            await new MediaCatalogService(_context).AssignCopyToSeriesAsync(mediaWork, newSeries.Id);
+            mediaWork.MediaSeries = newSeries;
 
             if (mediaWork.IsLinkedToJitenSubdeck && mediaWork.JitenDeckId.HasValue)
             {
@@ -254,7 +247,8 @@ public sealed class LibraryScreen
 
         if (choice.RemovesSeries)
         {
-            await new MediaCatalogService(_context).AssignCopyToSeriesAsync(mediaWork, null);
+            mediaWork.MediaSeries = null;
+            mediaWork.MediaSeriesId = null;
             return true;
         }
 
@@ -263,7 +257,7 @@ public sealed class LibraryScreen
             return false;
         }
 
-        await new MediaCatalogService(_context).AssignCopyToSeriesAsync(mediaWork, choice.Series.Id);
+        mediaWork.MediaSeries = choice.Series;
         return true;
     }
 

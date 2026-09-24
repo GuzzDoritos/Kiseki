@@ -46,23 +46,14 @@ The system consists of a single solution (`Kiseki.slnx`) targeting **.NET 10** a
 ```text
 Franchise (e.g. "Re:Zero")
   └── 1 : N ── MediaSeries (e.g. "Re:Zero Light Novels" [Book])
-                 └── 1 : N ── MediaInstallment (e.g. "Re:Zero Volume 1")
-                                └── 1 : N ── MediaWork (tracked copy/edition)
-                                               └── 1 : N ── ImmersionLog (e.g. 2026-08-05, 5,420 chars)
+                 └── 1 : N ── MediaWork (e.g. "Re:Zero Volume 1")
+                                └── 1 : N ── ImmersionLog (e.g. 2026-08-05, 5,420 chars)
 ```
 
 ### Core Entities (`Kiseki.Core.Entities`)
 
-1. **`MediaInstallment`** (Canonical catalogue item):
-   - Represents what exists independently of whether the user tracks a copy.
-   - Has an explicit media type, nullable series membership, stored order, kind, release state/date, inclusion, canonical metadata/provenance, and a concurrency token.
-   - Provider-owned character counts and manual `CharacterCountOverride` values remain separate; effective catalogue totals prefer the manual override.
-   - Owns zero or more `MediaWork` copies. Deletion is restricted while copies exist; deleting a series sets installment membership to null.
-   - Provider identities use unique normalized keys, while provider snapshots remain separate from manual corrections. The conservative legacy backfill uses the work ID as the initial installment ID and leaves duplicate Jiten claims unassigned for later review.
-
-2. **`MediaWork`** (Tracked-copy aggregate root):
+1. **`MediaWork`** (Aggregate Root):
    - Represents a single trackable library item (a volume, game, or anime season).
-   - Has a nullable `MediaInstallmentId` during the Batch 1 compatibility window. `MediaSeriesId` and legacy metadata remain temporarily; Batch 1B commands will keep relationships synchronized.
    - Currently focused on `MediaType.Book`.
    - **Progress & Character Count Calculation**:
      - `TotalCharacters = ManualCharacterCountOverride ?? TtsuCharacterCount ?? JitenCharacterCount ?? 0`
@@ -73,14 +64,14 @@ Franchise (e.g. "Re:Zero")
      - Ensures valid positive IDs, non-negative character counts, and valid HTTPS cover URLs (max 2,048 characters).
      - Database enforces check constraint `CK_MediaWorks_JitenSubdeckRequiresDeck` (`JitenSubdeckId IS NULL OR JitenDeckId IS NOT NULL`).
 
-3. **`ImmersionLog`**:
+2. **`ImmersionLog`**:
    - Represents an immersion session with `Date` (`DateOnly`), `CharactersRead` (`int`), `TimeSpentMinutes` (`double`), and `Source` (`string`, defaults to `"ttsu"`).
    - Relationship to `MediaWork` is configured via `MediaWork.Logs`.
 
-4. **`MediaSeries`**:
-   - Groups installments of a specific `MediaType`. During compatibility it also retains the legacy works navigation. Deleting a series does **not** delete its installments or works (foreign keys are set to `null`).
+3. **`MediaSeries`**:
+   - Groups works of a specific `MediaType`. Deleting a series does **not** delete its works (foreign key `MediaSeriesId` is set to `null`).
 
-5. **`Franchise`**:
+4. **`Franchise`**:
    - High-level grouping across media types. Uses an optional `JitenAnchorDeckId` to anchor to Jiten's connected deck graph. Deleting a franchise sets `FranchiseId` on child series to `null`.
 
 ---
@@ -132,10 +123,6 @@ Franchise (e.g. "Re:Zero")
 - **Authoritative Selection & Refetch**:
   - `JitenMediaSelection`: Bridges Jiten DTOs to domain values (`DisplayTitle`, cover fallback, title choices).
   - When linking in Web (`LinkJiten`), the client **never trusts hidden form metadata**. On POST, the server re-fetches the deck detail from Jiten to ensure accurate counts and valid subdeck hierarchies before applying changes.
-- **Reviewed Catalogue Refresh**:
-  - `JitenCatalogueReconciliationService` fetches complete paginated evidence before opening a transaction, stores an expiring server-side review, and requires approved proposal choices plus fresh provider/local fingerprints at apply time.
-  - Complete fetches may mark disappeared identities as missing; incomplete pagination never proves absence. Refresh updates canonical provider fields and snapshots without deleting installments, creating tracked copies, or rewriting copy metadata.
-  - `JitenCatalogueRefreshReceipt` makes operation IDs replay-safe after a lost response. Provider uniqueness and serializable apply handle concurrent refreshes; collisions require a new review.
 
 ---
 

@@ -124,9 +124,10 @@ public sealed class AddMediaScreen
             return;
         }
 
-        var catalog = new MediaCatalogService(_context);
-        var mediaWork = await catalog.CreateTrackedCopyAsync(selection.DisplayTitle, MediaType.Book);
-        await catalog.LinkToJitenAsync(mediaWork, selection);
+        var mediaWork = new MediaWork(selection.DisplayTitle, mediaType: MediaType.Book);
+        selection.ApplyTo(mediaWork);
+
+        _context.MediaWorks.Add(mediaWork);
         await _context.SaveChangesAsync();
 
         AnsiConsole.MarkupLine("[green]Book added successfully.[/]");

@@ -43,10 +43,6 @@ public class MediaWork
     public Guid? MediaSeriesId { get; set; }
     public MediaSeries? MediaSeries { get; set; }
 
-    public Guid? MediaInstallmentId { get; set; }
-    public MediaInstallment? MediaInstallment { get; set; }
-    public Guid Version { get; set; } = Guid.NewGuid();
-
     public int? JitenDeckId { get; set; }
     public int? JitenSubdeckId { get; private set; }
     public string? CoverUrl { get; private set; }

@@ -1,5 +1,4 @@
 using Kiseki.Core.DTOs;
-using Kiseki.Core.Entities;
 using Kiseki.Core.Services;
 
 namespace Kiseki.Tests;
@@ -17,9 +16,6 @@ public sealed class TtsuBookImporterTests
         var work = TtsuBookImporter.CreateMediaWork(book);
 
         Assert.Equal("Test Book", work.Title);
-        Assert.NotNull(work.MediaInstallment);
-        Assert.Equal(work.MediaInstallment!.Id, work.MediaInstallmentId);
-        Assert.Equal(MediaType.Book, work.MediaInstallment.MediaType);
         Assert.Equal(2, work.Logs.Count);
         Assert.Equal(550, work.CurrentCharactersRead);
     }

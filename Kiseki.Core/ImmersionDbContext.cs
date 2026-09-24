@@ -11,13 +11,6 @@ namespace Kiseki.Core
 
         public DbSet<MediaWork> MediaWorks { get; set; }
 
-        public DbSet<MediaInstallment> MediaInstallments { get; set; }
-        public DbSet<InstallmentProviderIdentity> InstallmentProviderIdentities { get; set; }
-        public DbSet<InstallmentProviderSnapshot> InstallmentProviderSnapshots { get; set; }
-        public DbSet<JitenCatalogueRefreshReceipt> JitenCatalogueRefreshReceipts { get; set; }
-        public DbSet<JitenFranchiseGraphNodeState> JitenFranchiseGraphNodeStates { get; set; }
-        public DbSet<JitenFranchiseTopologyReceipt> JitenFranchiseTopologyReceipts { get; set; }
-
         public DbSet<ImmersionLog> ImmersionLogs { get; set; }
         public DbSet<TtsuBinding> TtsuBindings { get; set; }
         public DbSet<TtsuImportReceipt> TtsuImportReceipts { get; set; }
@@ -94,48 +87,6 @@ namespace Kiseki.Core
                 entity.HasIndex(franchise => franchise.JitenAnchorDeckId);
             });
 
-            modelBuilder.Entity<JitenFranchiseGraphNodeState>(entity =>
-            {
-                entity.HasKey(state => new { state.FranchiseId, state.DeckId });
-                entity.Property(state => state.LastProviderTitle).HasMaxLength(512);
-                entity.Property(state => state.ProviderFingerprint).HasMaxLength(128);
-                entity.Property(state => state.Version).IsConcurrencyToken().HasDefaultValue(Guid.Empty);
-                entity.HasIndex(state => state.MediaSeriesId);
-                entity.HasOne(state => state.Franchise)
-                    .WithMany()
-                    .HasForeignKey(state => state.FranchiseId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.HasOne(state => state.MediaSeries)
-                    .WithMany()
-                    .HasForeignKey(state => state.MediaSeriesId)
-                    .OnDelete(DeleteBehavior.SetNull);
-                entity.ToTable(table =>
-                {
-                    table.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Deck", "\"DeckId\" > 0");
-                    table.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Resolution",
-                        "\"Resolution\" BETWEEN 1 AND 3");
-                    table.HasCheckConstraint("CK_JitenFranchiseGraphNodeStates_Fingerprint",
-                        "length(trim(\"ProviderFingerprint\")) BETWEEN 1 AND 128");
-                });
-            });
-
-            modelBuilder.Entity<JitenFranchiseTopologyReceipt>(entity =>
-            {
-                entity.HasKey(receipt => receipt.Id);
-                entity.Property(receipt => receipt.ReviewFingerprint).HasMaxLength(128);
-                entity.HasIndex(receipt => receipt.FranchiseId);
-                entity.HasOne<Franchise>()
-                    .WithMany()
-                    .HasForeignKey(receipt => receipt.FranchiseId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.ToTable(table =>
-                {
-                    table.HasCheckConstraint("CK_JitenFranchiseTopologyReceipts_Anchor", "\"AnchorDeckId\" > 0");
-                    table.HasCheckConstraint("CK_JitenFranchiseTopologyReceipts_Fingerprint",
-                        "length(trim(\"ReviewFingerprint\")) BETWEEN 1 AND 128");
-                });
-            });
-
             modelBuilder.Entity<MediaSeries>(entity =>
             {
                 entity.Property(series => series.Title).IsRequired();
@@ -148,110 +99,6 @@ namespace Kiseki.Core
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
-            modelBuilder.Entity<MediaInstallment>(entity =>
-            {
-                entity.Property(installment => installment.LegacyTitle).HasMaxLength(512);
-                entity.Property(installment => installment.CanonicalTitle).HasMaxLength(512);
-                entity.Property(installment => installment.TitleOverride).HasMaxLength(512);
-                entity.Property(installment => installment.MediaType).HasDefaultValue(MediaType.Book);
-                entity.Property(installment => installment.IsIncluded).HasDefaultValue(true);
-                entity.Property(installment => installment.CanonicalCoverUrl).HasMaxLength(2048);
-                entity.Property(installment => installment.Version)
-                    .IsConcurrencyToken()
-                    .HasDefaultValue(Guid.Empty);
-                entity.HasIndex(installment => new { installment.MediaSeriesId, installment.OrderKey });
-                entity.HasOne(installment => installment.MediaSeries)
-                    .WithMany(series => series.Installments)
-                    .HasForeignKey(installment => installment.MediaSeriesId)
-                    .OnDelete(DeleteBehavior.SetNull);
-                entity.ToTable(table =>
-                {
-                    table.HasCheckConstraint("CK_MediaInstallments_OrderKey", "\"OrderKey\" >= 0");
-                    table.HasCheckConstraint("CK_MediaInstallments_MediaType", "\"MediaType\" IN (1, 2, 3)");
-                    table.HasCheckConstraint("CK_MediaInstallments_Kind", "\"Kind\" BETWEEN 0 AND 7");
-                    table.HasCheckConstraint("CK_MediaInstallments_ReleaseState",
-                        "\"ReleaseState\" BETWEEN 0 AND 2 AND (\"ReleaseStateOverride\" IS NULL OR \"ReleaseStateOverride\" BETWEEN 0 AND 2)");
-                    table.HasCheckConstraint("CK_MediaInstallments_CanonicalCoverSource",
-                        "\"CanonicalCoverSource\" BETWEEN 0 AND 3");
-                    table.HasCheckConstraint("CK_MediaInstallments_Title",
-                        "coalesce(length(trim(\"LegacyTitle\")), 0) > 0 OR coalesce(length(trim(\"CanonicalTitle\")), 0) > 0 OR coalesce(length(trim(\"TitleOverride\")), 0) > 0");
-                    table.HasCheckConstraint("CK_MediaInstallments_CanonicalCharacterCount",
-                        "\"CanonicalCharacterCount\" IS NULL OR \"CanonicalCharacterCount\" > 0");
-                    table.HasCheckConstraint("CK_MediaInstallments_CharacterCountOverride",
-                        "\"CharacterCountOverride\" IS NULL OR \"CharacterCountOverride\" > 0");
-                    table.HasCheckConstraint("CK_MediaInstallments_CanonicalCover",
-                        "(\"CanonicalCoverUrl\" IS NULL AND \"CanonicalCoverSource\" = 0) OR (\"CanonicalCoverUrl\" IS NOT NULL AND \"CanonicalCoverSource\" <> 0)");
-                });
-            });
-
-            modelBuilder.Entity<InstallmentProviderIdentity>(entity =>
-            {
-                entity.HasKey(identity => new { identity.Provider, identity.NormalizedKey });
-                entity.Property(identity => identity.Provider)
-                    .HasMaxLength(InstallmentProviderIdentity.MaxProviderLength);
-                entity.Property(identity => identity.NormalizedKey)
-                    .HasMaxLength(InstallmentProviderIdentity.MaxNormalizedKeyLength);
-                entity.HasIndex(identity => identity.MediaInstallmentId);
-                entity.HasOne(identity => identity.MediaInstallment)
-                    .WithMany(installment => installment.ProviderIdentities)
-                    .HasForeignKey(identity => identity.MediaInstallmentId)
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.ToTable(table => table.HasCheckConstraint(
-                    "CK_InstallmentProviderIdentities_ItemIds",
-                    "\"ProviderItemId\" > 0 AND (\"ParentProviderItemId\" IS NULL OR \"ParentProviderItemId\" > 0)"));
-                entity.ToTable(table => table.HasCheckConstraint(
-                    "CK_InstallmentProviderIdentities_Keys",
-                    "length(trim(\"Provider\")) BETWEEN 1 AND 64 AND length(trim(\"NormalizedKey\")) BETWEEN 1 AND 256"));
-            });
-
-            modelBuilder.Entity<InstallmentProviderSnapshot>(entity =>
-            {
-                entity.HasKey(snapshot => new { snapshot.Provider, snapshot.NormalizedKey, snapshot.Fingerprint });
-                entity.Property(snapshot => snapshot.Provider)
-                    .HasMaxLength(InstallmentProviderIdentity.MaxProviderLength);
-                entity.Property(snapshot => snapshot.NormalizedKey)
-                    .HasMaxLength(InstallmentProviderIdentity.MaxNormalizedKeyLength);
-                entity.Property(snapshot => snapshot.Fingerprint)
-                    .HasMaxLength(InstallmentProviderSnapshot.MaxFingerprintLength);
-                entity.Property(snapshot => snapshot.Title).HasMaxLength(512);
-                entity.Property(snapshot => snapshot.CoverUrl).HasMaxLength(2048);
-                entity.Property(snapshot => snapshot.PayloadJson).HasColumnType("text");
-                entity.Property(snapshot => snapshot.Version)
-                    .IsConcurrencyToken()
-                    .HasDefaultValue(Guid.Empty);
-                entity.HasIndex(snapshot => new { snapshot.Provider, snapshot.NormalizedKey, snapshot.ObservedAtUtc });
-                entity.HasOne(snapshot => snapshot.ProviderIdentity)
-                    .WithMany(identity => identity.Snapshots)
-                    .HasForeignKey(snapshot => new { snapshot.Provider, snapshot.NormalizedKey })
-                    .OnDelete(DeleteBehavior.Cascade);
-                entity.ToTable(table =>
-                {
-                    table.HasCheckConstraint("CK_InstallmentProviderSnapshots_CharacterCount",
-                        "\"CharacterCount\" IS NULL OR \"CharacterCount\" >= 0");
-                    table.HasCheckConstraint("CK_InstallmentProviderSnapshots_ProviderOrder",
-                        "\"ProviderOrder\" IS NULL OR \"ProviderOrder\" >= 0");
-                    table.HasCheckConstraint("CK_InstallmentProviderSnapshots_Enums",
-                        "\"CoverSource\" BETWEEN 0 AND 3 AND \"ReleaseState\" BETWEEN 0 AND 2");
-                    table.HasCheckConstraint("CK_InstallmentProviderSnapshots_Fingerprint",
-                        "length(trim(\"Fingerprint\")) BETWEEN 1 AND 128");
-                    table.HasCheckConstraint("CK_InstallmentProviderSnapshots_Cover",
-                        "(\"CoverUrl\" IS NULL AND \"CoverSource\" = 0) OR (\"CoverUrl\" IS NOT NULL AND \"CoverSource\" <> 0)");
-                });
-            });
-
-            modelBuilder.Entity<JitenCatalogueRefreshReceipt>(entity =>
-            {
-                entity.HasKey(receipt => receipt.Id);
-                entity.Property(receipt => receipt.ReviewFingerprint).HasMaxLength(128);
-                entity.HasIndex(receipt => receipt.MediaSeriesId);
-                entity.ToTable(table =>
-                {
-                    table.HasCheckConstraint("CK_JitenCatalogueRefreshReceipts_Deck", "\"JitenDeckId\" > 0");
-                    table.HasCheckConstraint("CK_JitenCatalogueRefreshReceipts_Fingerprint",
-                        "length(trim(\"ReviewFingerprint\")) BETWEEN 1 AND 128");
-                });
-            });
-
             modelBuilder.Entity<MediaWork>(entity =>
             {
                 entity.Property(work => work.MediaType)
@@ -262,12 +109,8 @@ namespace Kiseki.Core
                     .HasDefaultValue(MediaCoverSource.None);
                 entity.Property(work => work.CoverProviderItemId)
                     .HasMaxLength(128);
-                entity.Property(work => work.Version)
-                    .IsConcurrencyToken()
-                    .HasDefaultValue(Guid.Empty);
 
                 entity.HasIndex(work => work.MediaSeriesId);
-                entity.HasIndex(work => work.MediaInstallmentId);
                 entity.HasIndex(work => work.JitenDeckId);
                 entity.HasIndex(work => work.JitenSubdeckId);
 
@@ -275,11 +118,6 @@ namespace Kiseki.Core
                     .WithMany(series => series.Works)
                     .HasForeignKey(work => work.MediaSeriesId)
                     .OnDelete(DeleteBehavior.SetNull);
-
-                entity.HasOne(work => work.MediaInstallment)
-                    .WithMany(installment => installment.Copies)
-                    .HasForeignKey(work => work.MediaInstallmentId)
-                    .OnDelete(DeleteBehavior.Restrict);
 
                 entity.ToTable(table =>
                 {
