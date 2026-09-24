@@ -20,9 +20,10 @@ public static class MediaWorkTable
 
         foreach (var mediaWork in mediaWorks)
         {
+            var seriesTitle = mediaWork.MediaInstallment?.MediaSeries?.Title ?? mediaWork.MediaSeries?.Title;
             table.AddRow(
                 mediaWork.MediaType.ToString(),
-                Markup.Escape(mediaWork.MediaSeries?.Title ?? "—"),
+                Markup.Escape(seriesTitle ?? "—"),
                 Markup.Escape(mediaWork.Title),
                 mediaWork.TotalCharacters.ToString("N0"),
                 mediaWork.CurrentCharactersRead.ToString("N0"),
