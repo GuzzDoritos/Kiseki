@@ -30,7 +30,7 @@ public sealed class TtsuSchemaUpgradeGoogleBooksTests
                 CREATE TABLE "MediaWorks" (
                     "Id" TEXT NOT NULL CONSTRAINT "PK_MediaWorks" PRIMARY KEY,
                     "Title" TEXT NOT NULL,
-                    "MediaType" INTEGER NOT NULL DEFAULT 0,
+                    "MediaType" INTEGER NOT NULL DEFAULT 1,
                     "CoverUrl" TEXT NULL,
                     "CoverSource" INTEGER NOT NULL DEFAULT 0,
                     "IsCompleted" INTEGER NOT NULL DEFAULT 0,
@@ -58,7 +58,7 @@ public sealed class TtsuSchemaUpgradeGoogleBooksTests
                 """);
 
             await context.Database.ExecuteSqlInterpolatedAsync(
-                $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"CoverSource\", \"CoverUrl\", \"IsCompleted\") VALUES ({workId}, 'Legacy Work', 0, 1, 'https://cdn.jiten.moe/legacy.jpg', 0)");
+                $"INSERT INTO \"MediaWorks\" (\"Id\", \"Title\", \"MediaType\", \"CoverSource\", \"CoverUrl\", \"IsCompleted\") VALUES ({workId}, 'Legacy Work', 1, 1, 'https://cdn.jiten.moe/legacy.jpg', 0)");
         }
 
         // Run additive upgrade once

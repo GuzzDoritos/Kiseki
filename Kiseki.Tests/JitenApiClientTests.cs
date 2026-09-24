@@ -66,6 +66,36 @@ public class JitenApiClientTests
     }
 
     [Fact]
+    public async Task GetDeckCatalogueAsync_ReportsIncompletePaginationInsteadOfInferringAbsence()
+    {
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var second = request.RequestUri?.Query.Contains("offset=1") == true;
+            var json = second
+                ? """
+                  { "data": { "mainDeck": { "deckId": 10, "childrenDeckCount": 2 }, "subDecks": [] },
+                    "totalItems": 2, "pageSize": 1, "currentOffset": 1 }
+                  """
+                : """
+                  { "data": { "mainDeck": { "deckId": 10, "childrenDeckCount": 2 },
+                    "subDecks": [{ "deckId": 101, "originalTitle": "Volume 1" }] },
+                    "totalItems": 2, "pageSize": 1, "currentOffset": 0 }
+                  """;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var result = await new JitenApiClient(new HttpClient(handler)).GetDeckCatalogueAsync(10);
+
+        Assert.False(result.IsComplete);
+        Assert.Equal(2, result.ExpectedItems);
+        Assert.Equal(1, result.RetrievedItems);
+        Assert.NotNull(result.Warning);
+    }
+
+    [Fact]
     public async Task GetDeckDetailAsync_ThrowsJitenHttpException_WithStatusCodeAndRetryAfter()
     {
         var handler = new StubHttpMessageHandler(_ =>
