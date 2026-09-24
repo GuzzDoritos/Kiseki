@@ -6,9 +6,9 @@ Audited baseline: `8a12cb1`
 
 Decision record: [ADR 0001](adr/0001-wide-catalogue-domain.md)
 
-## Exit assessment
+## Audit assessment
 
-Batch 0 is complete. The accepted domain decisions are recorded, the current writers and readers are inventoried, the dependent command/query contracts are frozen below, and the Batch 1A migration/backfill behavior is specified. The baseline suite passes with 674 tests passed, 4 PostgreSQL integration tests skipped, and 0 failed.
+The Batch 0 audit is complete and its domain decisions were accepted by the maintainer on 2026-09-21. The current writers and readers are inventoried, the dependent command/query contracts are drafted below, and the Batch 1A migration/backfill behavior is specified. The audited baseline passed with 674 tests passed, 4 PostgreSQL integration tests skipped, and 0 failed.
 
 No import, cover, receipt-replay, or SQLite-upgrade correctness issue was found that blocks additive schema work. The skipped PostgreSQL tests mean PostgreSQL migration/concurrency readiness is not established; actual execution with `KISEKI_TEST_POSTGRES` is a mandatory Batch 1A exit gate.
 
@@ -219,6 +219,8 @@ public sealed record ProgressSummaryResult(
     double? Fraction,
     long? EstimatedKnownTotalProgress,
     long KnownTotalDenominator,
+    long ComputableProgressDenominator,
+    long UnknownProgressKnownTotal,
     int KnownTotalInstallments,
     int UnknownTotalInstallments,
     int UnknownProgressInstallments);
@@ -241,7 +243,7 @@ Cross-row media-type agreement is enforced by Core commands and verified after b
 
 ### Transactional backfill
 
-1. Acquire the provider-appropriate migration lock and run the schema change and backfill under the startup migration transaction/coordination mechanism.
+1. Acquire a transaction-scoped PostgreSQL advisory lock or a SQLite immediate database write lock and run the schema change/backfill before enabling catalogue entry points. Use a fixed application lock key/name, deterministic IDs, and database uniqueness together; do not rely on an in-process mutex.
 2. For each work with no installment link, insert an installment whose `Id` equals the work `Id`, copying media type, legacy series membership, title as legacy-unknown display data, release as unknown, and inclusion as true.
 3. Seed order keys 100 apart per series from the current deterministic ordering (title, then work `Guid`). Standalone entries receive a stable default key. Do not derive order by parsing titles.
 4. Set `MediaWork.MediaInstallmentId` to its own ID. Mirror the existing series relationship during compatibility.

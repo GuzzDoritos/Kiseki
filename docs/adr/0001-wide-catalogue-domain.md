@@ -1,6 +1,6 @@
 # ADR 0001: Wide catalogue ownership, identity, and progress
 
-- Status: Accepted for implementation
+- Status: Accepted
 - Date: 2026-09-21
 - Decision owners: Kiseki maintainers
 - Scope: Batches 1A through 7B of the wide series/franchise/anime plan
@@ -9,7 +9,7 @@
 
 `MediaWork` currently represents both a catalogue item and the user's tracked copy. That works for a library of individual books, but it cannot represent an untracked volume in a series, two editions of the same volume, or a reread without inflating series progress. `MediaSeries` and `Franchise` already exist, and legacy rows, logs, TTSU bindings, import receipts, covers, and Jiten metadata must remain intact.
 
-This ADR accepts the defaults proposed in the implementation plan. Schema and feature work must follow these decisions unless a later ADR supersedes them.
+This ADR records the defaults accepted by the maintainer for implementation. A later incompatible decision must supersede this record explicitly.
 
 ## Decision
 
@@ -83,11 +83,11 @@ For a copy, explicit completion produces a fraction of 1. Otherwise its fraction
 
 For an installment, any explicitly completed copy completes it. Otherwise select the greatest known copy fraction. Multiple copies never add to the catalogue denominator.
 
-For included, released book installments with known canonical totals `C_i`, normalized series progress is:
+For included, released book installments with known canonical totals `C_i` and known progress, normalized series progress is:
 
 `sum(C_i * p_i) / sum(C_i)`
 
-where `p_i` is the selected copy fraction, or zero for an untracked installment. The numerator is labelled “estimated progress against known totals,” not lifetime characters read. Report known-total coverage and unknown-progress counts separately. If there is no valid denominator, progress is unavailable rather than 0%.
+where `p_i` is the selected copy fraction, or zero for an untracked installment. A tracked installment whose copy progress is unknown is excluded from the computable denominator and reported separately as unknown-progress canonical weight/count; it is not treated as zero. The numerator is labelled “estimated progress against known totals,” not lifetime characters read. Report canonical-total and computable-progress coverage separately. If there is no valid computable denominator, progress is unavailable rather than 0%.
 
 Lifetime activity is the sum of actual sessions across copies. Franchise summaries retain the unit of each series and do not expose a cross-media percentage.
 
