@@ -1,26 +1,271 @@
 @page "{id:guid}"
 @model Kiseki.Web.Pages.Series.DetailsModel
 @{
-    ViewData["Title"] = "Series details";
+    ViewData["Title"] = Model.Series.Title;
+
+    var seriesProgress = new ProgressBarViewModel(
+        Model.Series.CurrentCharactersRead,
+        Model.Series.TotalCharacters,
+        $"{Model.Series.CurrentCharactersRead:N0} / {Model.Series.TotalCharacters:N0} characters read",
+        Model.Series.ProgressPercentage >= 100 && Model.Series.TotalCharacters > 0,
+        Model.Series.TotalCharacters > 0,
+        Model.Series.ProgressPercentage);
 }
 
 <nav class="breadcrumb-nav" aria-label="Breadcrumb">
-    <a asp-page="/Series/Index">Series</a><span>/</span><span>Series details</span>
+    <a asp-page="/Series/Index">← Series</a>
 </nav>
+
+@if (TempData["SeriesNotice"] is string seriesNotice)
+{
+    <div class="page-notice" role="status">@seriesNotice</div>
+}
 
 <div class="page-header">
     <div>
         <span class="media-badge media-badge-book">Book series</span>
-        <h1>Media series</h1>
-        <p class="page-description">Series ID: @Model.Id</p>
+        <h1>@Model.Series.Title</h1>
+        <p class="page-description">
+            @Model.Series.Installments.Count @(Model.Series.Installments.Count == 1 ? "volume" : "volumes")
+            @if (Model.Series.JitenDeckId.HasValue)
+            {
+                <span> • Jiten deck @Model.Series.JitenDeckId</span>
+            }
+        </p>
     </div>
-    <a class="btn btn-outline-secondary" asp-page="/Series/Edit" asp-route-id="@Model.Id">Edit series</a>
 </div>
 
-<section class="content-card section-block">
-    <div class="section-heading">
-        <div><p class="eyebrow">Works</p><h2>Entries in this series</h2></div>
+<div class="detail-grid">
+    <section class="content-card detail-primary">
+        <div class="detail-overview">
+            <div class="detail-cover @(Model.Series.EffectiveCoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                @if (Model.Series.EffectiveCoverUrl is not null)
+                {
+                    <img src="@Model.Series.EffectiveCoverUrl"
+                         alt="Cover for @Model.Series.Title"
+                         loading="lazy"
+                         referrerpolicy="no-referrer"
+                         data-cover-image />
+                }
+                <span data-cover-fallback hidden="@(Model.Series.EffectiveCoverUrl is not null ? "hidden" : null)">本</span>
+            </div>
+
+            <div class="detail-progress">
+                <div class="detail-heading">
+                    <h2>Progress</h2>
+                </div>
+                <partial name="_ProgressBar" model="seriesProgress" />
+
+                <dl class="detail-stat-grid mt-3">
+                    <div>
+                        <dt>Volumes finished</dt>
+                        <dd>@Model.Series.CompletedInstallmentsCount / @Model.Series.Installments.Count</dd>
+                    </div>
+                    <div>
+                        <dt>Characters read</dt>
+                        <dd>@Model.Series.CurrentCharactersRead.ToString("N0")</dd>
+                    </div>
+                    <div>
+                        <dt>Total characters</dt>
+                        <dd>@(Model.Series.TotalCharacters > 0 ? Model.Series.TotalCharacters.ToString("N0") : "Not set")</dd>
+                    </div>
+                    <div>
+                        <dt>Est. time left</dt>
+                        @if (Model.Series.TimeEstimate is { IsCompleted: true })
+                        {
+                            <dd class="series-time-complete">Done</dd>
+                        }
+                        else if (Model.Series.TimeEstimate is { HasSufficientData: true } est)
+                        {
+                            <dd title="@est.FormattedReadingTime reading time left based on your current reading speed">
+                                <span>@est.FormattedCalendarTime</span>
+                                <small class="series-time-sub">(@est.FormattedReadingTimeCompact)</small>
+                            </dd>
+                            @if (Model.Series.PaceProfile is { HasSufficientData: true } pace)
+                            {
+                                <div class="series-pace-hint" title="Speed: @pace.CharactersPerHour.ToString("N0") ch/h based on @pace.SourceDescription">
+                                    @pace.CharactersPerHour.ToString("N0") ch/h • @Math.Round(pace.DailyMinutes)m/d
+                                </div>
+                            }
+                            @if (est.HasUncountedVolumes)
+                            {
+                                <div class="series-uncounted-hint" title="@est.UncountedVolumesCount volume(s) have unknown length">
+                                    +@est.UncountedVolumesCount @(est.UncountedVolumesCount == 1 ? "vol" : "vols") uncounted
+                                </div>
+                            }
+                        }
+                        else if (Model.Series.RemainingCharacters == 0 && Model.Series.TotalCharacters == 0)
+                        {
+                            <dd class="text-muted">Length not set</dd>
+                        }
+                        else
+                        {
+                            <dd class="text-muted" title="Log reading sessions with time to calculate completion estimates">
+                                <span>--</span>
+                                <small class="series-time-sub">No time logs</small>
+                            </dd>
+                        }
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Installments Section -->
+<section class="content-card section-block mt-4">
+    <div class="section-heading mb-3">
+        <div>
+            <p class="eyebrow">Volumes</p>
+            <h2>Installments (@Model.Series.Installments.Count)</h2>
+        </div>
         <a class="btn btn-sm btn-outline-secondary" asp-page="/Library/Index">Open library</a>
     </div>
-    <div class="inline-empty">Assigned volumes or entries will be listed here in series order.</div>
+
+    @if (Model.Series.Installments.Count == 0)
+    {
+        <div class="inline-empty">
+            No volumes have been added to this series yet. Add your first volume below.
+        </div>
+    }
+    else
+    {
+        <div class="series-installments-list">
+            @foreach (var installment in Model.Series.Installments)
+            {
+                var installmentProgress = new ProgressBarViewModel(
+                    installment.EffectiveCharactersRead,
+                    installment.EffectiveTotalCharacters,
+                    $"{installment.EffectiveCharactersRead:N0} / {installment.EffectiveTotalCharacters:N0} ch",
+                    installment.IsCompleted,
+                    installment.EffectiveTotalCharacters > 0 || installment.IsCompleted,
+                    installment.ProgressPercentage);
+
+                <article class="series-installment-item">
+                    <div class="series-installment-cover @(installment.EffectiveCoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                        @if (installment.EffectiveCoverUrl is not null)
+                        {
+                            <img src="@installment.EffectiveCoverUrl"
+                                 alt="Cover for @installment.Title"
+                                 loading="lazy"
+                                 referrerpolicy="no-referrer"
+                                 data-cover-image />
+                        }
+                        <span data-cover-fallback hidden="@(installment.EffectiveCoverUrl is not null ? "hidden" : null)">本</span>
+                    </div>
+
+                    <div class="series-installment-info">
+                        <div class="series-installment-header">
+                            <span class="series-seq-badge">#@installment.SequenceNumber</span>
+                            <h3 class="series-installment-title" title="@installment.Title">@installment.Title</h3>
+                        </div>
+
+                        <div class="series-installment-meta">
+                            @if (installment.MediaWorkId.HasValue)
+                            {
+                                <span>Linked:</span>
+                                <a asp-page="/Library/Details" asp-route-id="@installment.MediaWorkId" class="series-linked-link">
+                                    @installment.MediaWorkTitle
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="series-unlinked-tag">Not linked to library</span>
+                            }
+                            @if (installment.JitenSubdeckId.HasValue)
+                            {
+                                <span>• Subdeck @installment.JitenSubdeckId</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="series-installment-progress">
+                        <partial name="_ProgressBar" model="installmentProgress" />
+                        @if (installment.IsCompleted)
+                        {
+                            <div class="installment-time-hint text-done">Completed</div>
+                        }
+                        else if (installment.TimeEstimate is { HasSufficientData: true } instEst)
+                        {
+                            <div class="installment-time-hint" title="@instEst.FormattedReadingTime reading time left (@instEst.FormattedCalendarTime)">
+                                <span>~@instEst.FormattedReadingTimeCompact left</span>
+                                <span class="installment-time-cal">(@instEst.FormattedCalendarTime)</span>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="series-installment-actions">
+                        @if (installment.MediaWorkId.HasValue)
+                        {
+                            <form method="post" asp-page-handler="UnlinkWork" asp-route-id="@Model.Series.Id" asp-route-installmentId="@installment.Id">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary" title="Unlink this volume from the library work">
+                                    Unlink
+                                </button>
+                            </form>
+                        }
+                        else if (Model.Series.AvailableWorks.Count > 0)
+                        {
+                            <form method="post" asp-page-handler="LinkWork" asp-route-id="@Model.Series.Id" asp-route-installmentId="@installment.Id" class="d-flex align-items-center gap-2">
+                                <select name="mediaWorkId" class="form-select form-select-sm" style="max-width: 180px;" required>
+                                    <option value="">Choose library work...</option>
+                                    @foreach (var work in Model.Series.AvailableWorks)
+                                    {
+                                        <option value="@work.Id">@work.Title</option>
+                                    }
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-primary">Link</button>
+                            </form>
+                        }
+
+                        <form method="post" asp-page-handler="RemoveInstallment" asp-route-id="@Model.Series.Id" asp-route-installmentId="@installment.Id" onsubmit="return confirm('Remove this volume slot from the series?');">
+                            <button type="submit" class="btn btn-sm btn-link text-danger p-1" title="Remove volume slot" aria-label="Remove volume slot">
+                                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="4" y1="4" x2="12" y2="12"></line>
+                                    <line x1="12" y1="4" x2="4" y2="12"></line>
+                                </svg>
+                            </button>
+                        </form>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+<!-- Add Installment Form -->
+<section class="content-card form-card mt-4">
+    <div class="section-heading mb-3">
+        <div>
+            <p class="eyebrow">Expand Series</p>
+            <h2>Add volume slot</h2>
+            <p class="page-description">Add another volume to this series, with an optional Jiten subdeck ID or estimated character count.</p>
+        </div>
+    </div>
+
+    <form method="post" asp-page-handler="AddInstallment" asp-route-id="@Model.Series.Id">
+        <div class="row g-3">
+            <div class="col-md-5">
+                <label class="form-label" asp-for="NewInstallment.Title"></label>
+                <input class="form-control" asp-for="NewInstallment.Title" placeholder="e.g. Volume @(Model.Series.Installments.Count + 1)" required />
+                <span asp-validation-for="NewInstallment.Title" class="text-danger small"></span>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" asp-for="NewInstallment.CharacterCount"></label>
+                <input class="form-control" asp-for="NewInstallment.CharacterCount" type="number" min="0" placeholder="e.g. 100000" />
+                <span asp-validation-for="NewInstallment.CharacterCount" class="text-danger small"></span>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" asp-for="NewInstallment.JitenSubdeckId"></label>
+                <input class="form-control" asp-for="NewInstallment.JitenSubdeckId" type="number" placeholder="e.g. 12345" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label" asp-for="NewInstallment.CoverUrl"></label>
+                <input class="form-control" asp-for="NewInstallment.CoverUrl" placeholder="https://..." />
+            </div>
+        </div>
+
+        <div class="form-actions mt-3">
+            <button class="btn btn-primary" type="submit">Add volume</button>
+        </div>
+    </form>
 </section>

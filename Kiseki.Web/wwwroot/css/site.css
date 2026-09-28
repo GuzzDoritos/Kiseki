@@ -3049,3 +3049,181 @@ button.is-loading,
     transition-duration: .01ms !important;
   }
 }
+
+/* =============================================================================
+   Series Details & Installments
+   ============================================================================= */
+
+.series-installments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.series-installment-item {
+  display: grid;
+  grid-template-columns: 48px minmax(180px, 1fr) 220px auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 4px;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+.series-installment-item:hover {
+  background: var(--color-raised);
+  border-color: var(--color-edge);
+}
+
+.series-installment-cover {
+  position: relative;
+  width: 48px;
+  height: 68px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .08);
+  background: var(--color-surface);
+  display: grid;
+  place-items: center;
+  color: var(--color-ink-3);
+  font-size: 13px;
+}
+
+.series-installment-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.series-installment-info {
+  min-width: 0;
+}
+
+.series-installment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.series-seq-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--color-raised);
+  border: 1px solid var(--color-edge);
+  color: var(--color-ink-2);
+}
+
+.series-installment-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.series-installment-meta {
+  font-size: 12px;
+  color: var(--color-ink-3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.series-linked-link {
+  color: var(--color-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--color-edge);
+  text-underline-offset: 3px;
+}
+
+.series-linked-link:hover {
+  color: var(--color-accent);
+}
+
+.series-unlinked-tag {
+  color: var(--color-ink-3);
+  font-style: italic;
+}
+
+.series-installment-progress {
+  min-width: 180px;
+}
+
+.series-time-sub {
+  font-size: 12px;
+  color: var(--color-ink-3);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.series-pace-hint {
+  font-size: 11px;
+  color: var(--color-ink-3);
+  line-height: 1.2;
+}
+
+.series-uncounted-hint {
+  font-size: 10px;
+  color: var(--color-amber);
+  line-height: 1.2;
+}
+
+.series-time-complete {
+  color: var(--color-green);
+  font-weight: 500;
+}
+
+.installment-time-hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-ink-2);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.installment-time-hint.text-done {
+  color: var(--color-green);
+  font-weight: 500;
+}
+
+.installment-time-cal {
+  color: var(--color-ink-3);
+}
+
+.series-installment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+@media (max-width: 768px) {
+  .series-installment-item {
+    grid-template-columns: 48px 1fr;
+    gap: 12px;
+  }
+
+  .series-installment-progress,
+  .series-installment-actions {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .series-installment-actions {
+    justify-content: flex-end;
+  }
+}
+

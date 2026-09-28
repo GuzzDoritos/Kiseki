@@ -2,27 +2,136 @@
 @model Kiseki.Web.Pages.Series.IndexModel
 @{
     ViewData["Title"] = "Series";
+    ViewData["MainClass"] = "app-main--flush";
+
+    string TypeTabClass(MediaType? type) => Model.Type == type ? "active" : string.Empty;
 }
 
-<div class="page-header">
-    <div>
-        <p class="eyebrow">Organization</p>
-        <h1>Series</h1>
-        <p class="page-description">Group related works while keeping books, anime, and games distinct.</p>
+<div class="library-page">
+    @if (TempData["SeriesNotice"] is string seriesNotice)
+    {
+        <div class="library-notice" role="status">@seriesNotice</div>
+    }
+
+    <header class="library-header">
+        <div class="library-heading">
+            <h1>Series</h1>
+            <span>@Model.TotalCount @(Model.TotalCount == 1 ? "series" : "series")</span>
+        </div>
+
+        <div class="library-header-actions">
+            <form class="library-search" method="get" role="search">
+                @if (Model.Type is not null)
+                {
+                    <input type="hidden" name="Type" value="@Model.Type" />
+                }
+                <label class="visually-hidden" for="series-search">Search series</label>
+                <svg aria-hidden="true" viewBox="0 0 16 16">
+                    <circle cx="7" cy="7" r="4.5"></circle>
+                    <path d="m10.5 10.5 3 3"></path>
+                </svg>
+                <input id="series-search" name="Search" type="search" value="@Model.Search" placeholder="Search series" />
+            </form>
+            <a class="primary-action" asp-page="/Series/Create">
+                <span aria-hidden="true">+</span>
+                Create series
+            </a>
+        </div>
+    </header>
+
+    <div class="library-filters">
+        <nav class="filter-tabs" aria-label="Filter by media type">
+            <a class="filter-tab @TypeTabClass(null)"
+               asp-page="/Series/Index"
+               asp-route-search="@Model.Search">All</a>
+            @foreach (var type in Enum.GetValues<MediaType>())
+            {
+                <a class="filter-tab @TypeTabClass(type)"
+                   asp-page="/Series/Index"
+                   asp-route-search="@Model.Search"
+                   asp-route-type="@type">@(type == MediaType.Book ? "Books" 
+                                         : type == MediaType.Game ? "Games" 
+                                         : type.ToString())
+                </a>
+            }
+        </nav>
     </div>
-    <a class="btn btn-primary" asp-page="/Series/Create">Create series</a>
-</div>
 
-<div class="filter-tabs page-tabs" role="group" aria-label="Media type">
-    <button type="button" class="filter-tab active">All</button>
-    <button type="button" class="filter-tab">Books</button>
-    <button type="button" class="filter-tab">Anime</button>
-    <button type="button" class="filter-tab">Games</button>
-</div>
+    <section class="library-results" aria-label="Series results">
+        @if (Model.Series.Count > 0)
+        {
+            <div class="media-grid">
+                @foreach (var item in Model.Series)
+                {
+                    var progress = new ProgressBarViewModel(
+                        item.CharactersRead,
+                        item.TotalCharacters,
+                        item.ProgressLabel,
+                        item.IsCompleted,
+                        true,
+                        null);
 
-<section class="content-card empty-state">
-    <div class="empty-icon">▦</div>
-    <h2>No series to show yet</h2>
-    <p>Series created in Core will eventually appear here with aggregate completion and work counts.</p>
-    <a class="btn btn-primary" asp-page="/Series/Create">Create your first series</a>
-</section>
+                    <article class="media-card">
+                        <div class="media-card-link">
+                            <a class="media-details-overlay"
+                               asp-page="/Series/Details"
+                               asp-route-id="@item.Id"
+                               aria-label="Open @item.Title details"></a>
+                            <div class="media-card-cover media-cover-@item.MediaType.ToString().ToLowerInvariant() @(item.EffectiveCoverUrl is not null ? "has-image" : string.Empty)"
+                                 aria-hidden="true"
+                                 data-cover-frame>
+                                @if (item.EffectiveCoverUrl is not null)
+                                {
+                                    <img class="media-card-cover-image"
+                                         src="@item.EffectiveCoverUrl"
+                                         alt=""
+                                         loading="lazy"
+                                         referrerpolicy="no-referrer"
+                                         data-cover-image />
+                                }
+                                <span data-cover-fallback hidden="@(item.EffectiveCoverUrl is not null ? "hidden" : null)">@item.TypeToJapanese</span>
+                            </div>
+
+                            <div class="media-card-body">
+                                <div class="media-card-header">
+                                    <span class="media-card-title" title="@item.Title">@item.Title</span>
+                                    <span class="media-card-series" title="@item.VolumeProgressText">@item.VolumeProgressText</span>
+                                </div>
+
+                                <div class="media-tags">
+                                    <span class="media-type-tag">@item.TypeToJapanese</span>
+                                    @if (item.IsJitenLinked)
+                                    {
+                                        <span class="source-tag"><i></i>Jiten</span>
+                                    }
+                                    <span class="source-tag"><i></i>@item.InstallmentsCount @(item.InstallmentsCount == 1 ? "volume" : "volumes")</span>
+                                </div>
+
+                                <div class="media-card-progress">
+                                    <partial name="_ProgressBar" model="progress" />
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="library-empty">
+                @if (Model.TotalCount == 0)
+                {
+                    <h2>No series created yet</h2>
+                    <p>Create a series to track immersion across multiple volumes or seasons.</p>
+                    <a class="secondary-action" asp-page="/Series/Create">Create your first series</a>
+                }
+                else
+                {
+                    <h2>No matching series</h2>
+                    <p>No series match your search filters.</p>
+                    <a class="secondary-action" asp-page="/Series/Index">Clear filters</a>
+                }
+            </div>
+        }
+    </section>
+</div>
