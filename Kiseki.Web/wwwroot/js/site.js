@@ -5,6 +5,7 @@ import { initTtsuAutoMatch, initTtsuAutoMatchProgress } from './components/ttsu-
 import { initNavigationProgress } from './components/navigation.js';
 import { initInlineEditors } from './components/inline-editor.js';
 import { initStatusToggle } from './components/status-toggle.js';
+import { initSeriesViewToggle } from './components/series-view-toggle.js';
 
 function initApp() {
     initCoverFallbacks();
@@ -15,6 +16,7 @@ function initApp() {
     initNavigationProgress();
     initInlineEditors();
     initStatusToggle();
+    initSeriesViewToggle();
 }
 
 if (document.readyState === 'loading') {

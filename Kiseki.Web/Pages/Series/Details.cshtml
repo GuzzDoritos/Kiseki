@@ -119,7 +119,17 @@
             <p class="eyebrow">Volumes</p>
             <h2>Installments (@Model.Series.Installments.Count)</h2>
         </div>
-        <a class="btn btn-sm btn-outline-secondary" asp-page="/Library/Index">Open library</a>
+        <div class="section-actions d-flex align-items-center gap-3">
+            <span class="series-completion-ratio @(Model.Series.Installments.Count > 0 && Model.Series.CompletedInstallmentsCount == Model.Series.Installments.Count ? "is-completed" : Model.Series.CompletedInstallmentsCount > 0 ? "has-progress" : string.Empty)">@Model.Series.CompletedInstallmentsCount/@Model.Series.Installments.Count read (@Model.Series.ProgressPercentage.ToString("N0")%)</span>
+            <div class="btn-group btn-group-sm heatmap-mode-group" role="group" aria-label="Select view mode">
+                <input type="radio" class="btn-check" name="SeriesView" id="seriesViewList" value="list" checked="@(Model.View != "covers")" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="seriesViewList">List</label>
+
+                <input type="radio" class="btn-check" name="SeriesView" id="seriesViewCovers" value="covers" checked="@(Model.View == "covers")" autocomplete="off">
+                <label class="btn btn-outline-secondary" for="seriesViewCovers">Covers</label>
+            </div>
+            <a class="btn btn-sm btn-outline-secondary" asp-page="/Library/Index">Open library</a>
+        </div>
     </div>
 
     @if (Model.Series.Installments.Count == 0)
@@ -130,7 +140,7 @@
     }
     else
     {
-        <div class="series-installments-list">
+        <div class="series-installments-list" id="seriesInstallmentsList" hidden="@(Model.View == "covers" ? "hidden" : null)" style="display: @(Model.View == "covers" ? "none" : "flex");">
             @foreach (var installment in Model.Series.Installments)
             {
                 var installmentProgress = new ProgressBarViewModel(
@@ -229,6 +239,60 @@
                 </article>
             }
         </div>
+
+        <div class="series-covers-grid" id="seriesCoversGrid" hidden="@(Model.View != "covers" ? "hidden" : null)" style="display: @(Model.View == "covers" ? "grid" : "none");">
+            @foreach (var installment in Model.Series.Installments)
+            {
+                var statusText = installment.IsCompleted
+                    ? "Completed"
+                    : installment.EffectiveCharactersRead > 0
+                        ? "Reading"
+                        : "Unread";
+
+                <div class="series-cover-tile @(installment.IsCompleted ? "is-read" : "is-unread")"
+                     title="@installment.Title • #@installment.SequenceNumber (@statusText)">
+                    @if (installment.MediaWorkId.HasValue)
+                    {
+                        <a asp-page="/Library/Details"
+                           asp-route-id="@installment.MediaWorkId"
+                           class="series-cover-link"
+                           aria-label="@installment.Title (@statusText)">
+                            <div class="series-cover-frame @(installment.EffectiveCoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                                @if (installment.EffectiveCoverUrl is not null)
+                                {
+                                    <img src="@installment.EffectiveCoverUrl"
+                                         alt="@installment.Title"
+                                         loading="lazy"
+                                         referrerpolicy="no-referrer"
+                                         class="series-cover-img"
+                                         data-cover-image />
+                                }
+                                <span class="series-cover-fallback" data-cover-fallback hidden="@(installment.EffectiveCoverUrl is not null ? "hidden" : null)">本</span>
+                            </div>
+                            <span class="series-cover-seq">#@installment.SequenceNumber</span>
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="series-cover-link is-unlinked" tabindex="0" role="img" aria-label="@installment.Title (@statusText - not in library)">
+                            <div class="series-cover-frame @(installment.EffectiveCoverUrl is not null ? "has-image" : string.Empty)" data-cover-frame>
+                                @if (installment.EffectiveCoverUrl is not null)
+                                {
+                                    <img src="@installment.EffectiveCoverUrl"
+                                         alt="@installment.Title"
+                                         loading="lazy"
+                                         referrerpolicy="no-referrer"
+                                         class="series-cover-img"
+                                         data-cover-image />
+                                }
+                                <span class="series-cover-fallback" data-cover-fallback hidden="@(installment.EffectiveCoverUrl is not null ? "hidden" : null)">本</span>
+                            </div>
+                            <span class="series-cover-seq">#@installment.SequenceNumber</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
     }
 </section>
 
@@ -268,4 +332,29 @@
             <button class="btn btn-primary" type="submit">Add volume</button>
         </div>
     </form>
+</section>
+
+<!-- Danger Zone -->
+<section class="content-card danger-zone-card mt-4">
+    <div class="danger-zone-content">
+        <div class="danger-zone-info">
+            <h2 class="danger-zone-title">Danger zone</h2>
+            <p class="danger-zone-description">
+                Delete this series and its volume slots. All underlying books in your library, immersion logs, and reading history will be preserved.
+            </p>
+        </div>
+        <div class="danger-zone-actions">
+            <form method="post"
+                  asp-page-handler="DeleteSeries"
+                  asp-route-id="@Model.Series.Id"
+                  onsubmit="return confirm('Delete this series? All underlying library books, immersion logs, and reading progress will remain safely in your library.');">
+                <button type="submit" class="btn btn-danger-outline">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2 4h12M5.333 4V2.667a1.333 1.333 0 0 1 1.334-1.333h2.666a1.333 1.333 0 0 1 1.334 1.334V4m2 0v8.667a1.333 1.333 0 0 1-1.334 1.333H4.667a1.333 1.333 0 0 1-1.334-1.333V4h9.334z"></path>
+                    </svg>
+                    Delete series
+                </button>
+            </form>
+        </div>
+    </div>
 </section>

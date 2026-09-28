@@ -846,6 +846,16 @@ table,
   font-size: 12px;
 }
 
+.page-error {
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 77, 77, .24);
+  border-radius: 6px;
+  background: rgba(255, 77, 77, .08);
+  color: #ff9999;
+  font-size: 12px;
+}
+
 .page-header h1 {
   margin: 0;
   font-family: var(--font-display);
@@ -1557,6 +1567,88 @@ body.cover-edit-open {
 
 .immersion-log-table tbody tr:last-child td {
   border-bottom: 0;
+}
+
+.immersion-log-table th.col-action,
+.immersion-log-table td.col-action {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
+
+.btn-icon-subtle-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--color-ink-3);
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.15s ease;
+}
+
+.btn-icon-subtle-danger:hover,
+.btn-icon-subtle-danger:focus-visible {
+  color: #ff5c5c;
+  background: rgba(255, 92, 92, 0.12);
+  border-color: rgba(255, 92, 92, 0.28);
+}
+
+.danger-zone-card {
+  border-color: rgba(255, 77, 77, 0.22);
+  background: rgba(255, 77, 77, 0.03);
+}
+
+.danger-zone-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.danger-zone-info {
+  flex: 1 1 300px;
+}
+
+.danger-zone-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #ff6b6b;
+  margin: 0 0 4px;
+}
+
+.danger-zone-description {
+  font-size: 13px;
+  color: var(--color-ink-2);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.btn-danger-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ff6b6b;
+  background: transparent;
+  border: 1px solid rgba(255, 77, 77, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-danger-outline:hover,
+.btn-danger-outline:focus-visible {
+  color: #ffffff;
+  background: #d32f2f;
+  border-color: #d32f2f;
 }
 
 .inline-empty {
@@ -3226,4 +3318,285 @@ button.is-loading,
     justify-content: flex-end;
   }
 }
+
+/* ==========================================================================
+   Bookmeter-style Compact Series Covers Grid & Installments View
+   ========================================================================== */
+[hidden] {
+  display: none !important;
+}
+
+.series-installments-list[hidden],
+.series-covers-grid[hidden] {
+  display: none !important;
+}
+
+.series-completion-ratio {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--color-ink-2);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.series-completion-ratio.has-progress {
+  background: rgba(62, 203, 116, 0.12);
+  border-color: rgba(62, 203, 116, 0.32);
+  color: #72e09b;
+}
+
+.series-completion-ratio.is-completed {
+  background: rgba(62, 203, 116, 0.2);
+  border-color: rgba(62, 203, 116, 0.45);
+  color: #a3f0c2;
+}
+
+.series-covers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 96px));
+  gap: 12px 10px;
+  padding: 10px 0;
+}
+
+.series-cover-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.series-cover-link {
+  display: block;
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  text-decoration: none;
+  background: var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.18s ease,
+              border-color 0.18s ease;
+  cursor: pointer;
+}
+
+.series-cover-link.is-unlinked {
+  cursor: default;
+}
+
+.series-cover-link:hover,
+.series-cover-link:focus-visible {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+  z-index: 3;
+}
+
+.series-cover-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1.45;
+  background: var(--color-raised);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.series-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: filter 0.22s ease, opacity 0.22s ease;
+}
+
+/* READ / COMPLETED VOLUMES: Full vibrant color */
+.series-cover-tile.is-read .series-cover-img {
+  filter: none;
+  opacity: 1;
+}
+
+.series-cover-tile.is-read .series-cover-link {
+  border-color: rgba(62, 203, 116, 0.35);
+}
+
+.series-cover-tile.is-read .series-cover-link:hover {
+  border-color: rgba(62, 203, 116, 0.8);
+  box-shadow: 0 10px 26px rgba(62, 203, 116, 0.25);
+}
+
+/* UNREAD VOLUMES: Greyed out / washed out */
+.series-cover-tile.is-unread .series-cover-img {
+  filter: grayscale(100%);
+  opacity: 0.32;
+}
+
+.series-cover-tile.is-unread .series-cover-link {
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(18, 18, 22, 0.8);
+}
+
+.series-cover-tile.is-unread .series-cover-link:hover .series-cover-img {
+  filter: grayscale(30%);
+  opacity: 0.85;
+}
+
+.series-cover-tile.is-unread .series-cover-link:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Fallback glyph frame */
+.series-cover-fallback {
+  color: var(--color-ink-3);
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  transition: color 0.2s ease;
+}
+
+.series-cover-tile.is-read .series-cover-fallback {
+  color: #86dca8;
+  background: rgba(62, 203, 116, 0.08);
+}
+
+.series-cover-tile.is-unread .series-cover-fallback {
+  color: var(--color-ink-3);
+  opacity: 0.4;
+}
+
+/* Sequence badge overlay */
+.series-cover-seq {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(12, 12, 15, 0.85);
+  color: var(--color-ink-2);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.2;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.series-cover-tile.is-read .series-cover-seq {
+  background: rgba(18, 55, 30, 0.9);
+  color: #a3f0c2;
+  border-color: rgba(62, 203, 116, 0.35);
+}
+
+@media (max-width: 576px) {
+  .series-covers-grid {
+    grid-template-columns: repeat(auto-fill, minmax(70px, 84px));
+    gap: 8px 6px;
+  }
+}
+
+/* ==========================================================================
+   TTSU Selective Book Upload Panel & Review Toolbar
+   ========================================================================== */
+.ttsu-book-selection-panel {
+  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-edge);
+  border-radius: 6px;
+}
+
+.ttsu-detected-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.ttsu-book-checkbox-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge) transparent;
+}
+
+.ttsu-book-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--color-raised);
+  border: 1px solid var(--color-edge-subtle);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+  user-select: none;
+}
+
+.ttsu-book-checkbox-item:hover {
+  background: var(--color-overlay);
+  border-color: var(--color-edge);
+}
+
+.ttsu-book-checkbox-item .form-check-input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.ttsu-book-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ttsu-book-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ttsu-mini-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ttsu-mini-badge-stats {
+  background: rgba(62, 203, 116, 0.15);
+  color: #72e09b;
+  border: 1px solid rgba(62, 203, 116, 0.3);
+}
+
+.ttsu-mini-badge-cover {
+  background: rgba(86, 156, 246, 0.15);
+  color: #8cbdfc;
+  border: 1px solid rgba(86, 156, 246, 0.3);
+}
+
+.ttsu-mini-badge-progress {
+  background: rgba(240, 162, 50, 0.15);
+  color: #f5bc6b;
+  border: 1px solid rgba(240, 162, 50, 0.3);
+}
+
 
