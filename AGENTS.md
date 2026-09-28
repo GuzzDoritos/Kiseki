@@ -166,3 +166,5 @@ Franchise (e.g. "Re:Zero")
    - External inputs (files, URLs, IDs) must be validated before persisting.
 4. **Follow EF Migration Disciplines**:
    - Always verify that entity model changes are accompanied by generated migrations and updated snapshot files.
+5. **No Automated Browser Testing**:
+   - Do NOT use automated browser subagents, headless browser drivers, or automated browser testing tools. They consume excessive tokens, take too long, and can get stuck in repetitive loops. Verify all behavior using automated unit/integration tests (`dotnet test`) and leave visual/interactive validation to the user.
