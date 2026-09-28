@@ -1,5 +1,6 @@
 using Kiseki.Core;
 using Kiseki.Core.Entities;
+using Kiseki.Core.Services;
 using Kiseki.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -7,8 +8,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kiseki.Web.Pages.Library;
 
-public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
+public sealed class DetailsModel(
+    ImmersionDbContext dbContext,
+    ILibraryManagementService? libraryManagementService = null) : PageModel
 {
+    private readonly ILibraryManagementService _libraryManagementService =
+        libraryManagementService ?? new LibraryManagementService(dbContext);
+
     public MediaWorkDetailsViewModel Work { get; private set; } = null!;
 
     public async Task<IActionResult> OnGetAsync(
@@ -232,6 +238,87 @@ public sealed class DetailsModel(ImmersionDbContext dbContext) : PageModel
             success = true,
             coverUrl = work.CoverUrl
         });
+    }
+
+    public async Task<IActionResult> OnPostDeleteSessionAsync(
+        Guid id,
+        Guid logId,
+        CancellationToken cancellationToken)
+    {
+        var isAjax = string.Equals(HttpContext?.Request?.Headers.XRequestedWith.ToString(), "XMLHttpRequest", StringComparison.OrdinalIgnoreCase) ||
+                     (HttpContext?.Request?.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        try
+        {
+            await _libraryManagementService.DeleteImmersionLogAsync(logId, id, cancellationToken);
+
+            if (isAjax)
+            {
+                return new JsonResult(new { success = true, message = "Deleted immersion session." });
+            }
+
+            if (TempData is not null)
+            {
+                TempData["LibraryNotice"] = "Deleted immersion session.";
+            }
+
+            return RedirectToPage(new { id });
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (isAjax)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+
+            if (TempData is not null)
+            {
+                TempData["LibraryError"] = ex.Message;
+            }
+
+            return RedirectToPage(new { id });
+        }
+    }
+
+    public async Task<IActionResult> OnPostDeleteWorkAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var work = await dbContext.MediaWorks
+            .AsNoTracking()
+            .Select(w => new { w.Id, w.Title })
+            .SingleOrDefaultAsync(w => w.Id == id, cancellationToken);
+
+        if (work is null)
+        {
+            if (TempData is not null)
+            {
+                TempData["LibraryError"] = $"Media work '{id}' not found.";
+            }
+
+            return RedirectToPage("/Library/Index");
+        }
+
+        try
+        {
+            await _libraryManagementService.DeleteMediaWorkAsync(id, cancellationToken);
+
+            if (TempData is not null)
+            {
+                TempData["LibraryNotice"] = $"Deleted “{work.Title}” from library.";
+            }
+
+            return RedirectToPage("/Library/Index");
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (TempData is not null)
+            {
+                TempData["LibraryError"] = ex.Message;
+            }
+
+            return RedirectToPage(new { id });
+        }
     }
 
     public sealed class UpdateTitleRequest

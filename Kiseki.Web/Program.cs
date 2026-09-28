@@ -101,6 +101,7 @@ builder.Services.AddHttpClient<IJitenApiClient, JitenApiClient>(client =>
     client.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<IJitenSelectionResolver, JitenSelectionResolver>();
 builder.Services.AddScoped<ISeriesService, SeriesService>();
+builder.Services.AddScoped<ILibraryManagementService, LibraryManagementService>();
 builder.Services.AddScoped<IReadingPaceService, ReadingPaceService>();
 builder.Services.AddSingleton<IMediaTitleParser, MediaTitleParser>();
 builder.Services.AddSingleton<IJitenCandidateScorer, JitenCandidateScorer>();

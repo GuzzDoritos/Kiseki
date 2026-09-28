@@ -3,7 +3,9 @@ using Kiseki.Core.Entities;
 using Kiseki.Web.Models;
 using Kiseki.Web.Pages.Library;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -441,6 +443,180 @@ public class LibraryDetailsPageTests
         Assert.Contains("https://books.google.com/googlebooks/images/poweredby.png", libraryIndex);
         Assert.Contains("Powered by Google", libraryIndex);
     }
+
+    [Fact]
+    public async Task DeleteSession_SuccessfullyRemovesLog_RedirectsWithNotice()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book", mediaType: MediaType.Book);
+        var log1 = new ImmersionLog
+        {
+            MediaWorkId = work.Id,
+            Date = new DateOnly(2026, 1, 1),
+            CharactersRead = 1000,
+            TimeSpentMinutes = 20.0
+        };
+        var log2 = new ImmersionLog
+        {
+            MediaWorkId = work.Id,
+            Date = new DateOnly(2026, 1, 2),
+            CharactersRead = 2000,
+            TimeSpentMinutes = 40.0
+        };
+        work.Logs.Add(log1);
+        work.Logs.Add(log2);
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = CreatePageModel(database.Context);
+        var result = await model.OnPostDeleteSessionAsync(work.Id, log1.Id, CancellationToken.None);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal(work.Id, redirect.RouteValues?["id"]);
+        Assert.Equal("Deleted immersion session.", model.TempData["LibraryNotice"]);
+
+        database.Context.ChangeTracker.Clear();
+        var updatedWork = await database.Context.MediaWorks
+            .Include(w => w.Logs)
+            .SingleAsync(w => w.Id == work.Id);
+
+        Assert.Single(updatedWork.Logs);
+        Assert.Equal(log2.Id, updatedWork.Logs.First().Id);
+        Assert.Equal(2000, updatedWork.CurrentCharactersRead);
+    }
+
+    [Fact]
+    public async Task DeleteSession_AjaxRequest_ReturnsJsonSuccess()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book", mediaType: MediaType.Book);
+        var log = new ImmersionLog
+        {
+            MediaWorkId = work.Id,
+            Date = new DateOnly(2026, 1, 1),
+            CharactersRead = 1000,
+            TimeSpentMinutes = 20.0
+        };
+        work.Logs.Add(log);
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = CreatePageModel(database.Context);
+        model.HttpContext.Request.Headers.XRequestedWith = "XMLHttpRequest";
+
+        var result = await model.OnPostDeleteSessionAsync(work.Id, log.Id, CancellationToken.None);
+
+        var jsonResult = Assert.IsType<JsonResult>(result);
+        Assert.NotNull(jsonResult.Value);
+        var json = System.Text.Json.JsonSerializer.Serialize(jsonResult.Value);
+        Assert.Contains("\"success\":true", json);
+
+        database.Context.ChangeTracker.Clear();
+        var updatedWork = await database.Context.MediaWorks
+            .Include(w => w.Logs)
+            .SingleAsync(w => w.Id == work.Id);
+
+        Assert.Empty(updatedWork.Logs);
+    }
+
+    [Fact]
+    public async Task DeleteSession_NonExistentLog_RedirectsWithErrorNotice()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var work = new MediaWork("Test Book", mediaType: MediaType.Book);
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = CreatePageModel(database.Context);
+        var result = await model.OnPostDeleteSessionAsync(work.Id, Guid.NewGuid(), CancellationToken.None);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal(work.Id, redirect.RouteValues?["id"]);
+        Assert.True(model.TempData.ContainsKey("LibraryError"));
+        Assert.Contains("not found", (string)model.TempData["LibraryError"]!);
+    }
+
+    [Fact]
+    public async Task DeleteWork_SuccessfullyDeletesWorkAndRedirectsToLibraryIndex()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var series = new MediaSeries("Spice and Wolf", MediaType.Book);
+        var installment = new SeriesInstallment(series.Id, sequenceNumber: 1, title: "Vol 1", jitenCharacterCount: 50_000);
+        series.Installments.Add(installment);
+
+        var work = new MediaWork("Spice and Wolf Vol 1", mediaType: MediaType.Book)
+        {
+            MediaSeriesId = series.Id
+        };
+        var log = new ImmersionLog
+        {
+            MediaWorkId = work.Id,
+            Date = new DateOnly(2026, 1, 1),
+            CharactersRead = 5000,
+            TimeSpentMinutes = 30.0
+        };
+        work.Logs.Add(log);
+        installment.MediaWorkId = work.Id;
+        installment.MediaWork = work;
+
+        database.Context.MediaSeries.Add(series);
+        database.Context.MediaWorks.Add(work);
+        await database.Context.SaveChangesAsync();
+
+        var model = CreatePageModel(database.Context);
+        var result = await model.OnPostDeleteWorkAsync(work.Id, CancellationToken.None);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Library/Index", redirect.PageName);
+        Assert.Equal("Deleted “Spice and Wolf Vol 1” from library.", model.TempData["LibraryNotice"]);
+
+        database.Context.ChangeTracker.Clear();
+
+        Assert.Null(await database.Context.MediaWorks.FindAsync(work.Id));
+        Assert.Empty(await database.Context.ImmersionLogs.Where(l => l.MediaWorkId == work.Id).ToListAsync());
+
+        var persistedInstallment = await database.Context.SeriesInstallments.FindAsync(installment.Id);
+        Assert.NotNull(persistedInstallment);
+        Assert.Null(persistedInstallment.MediaWorkId);
+    }
+
+    [Fact]
+    public async Task DeleteWork_NonExistentWork_RedirectsToLibraryIndexWithError()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var model = CreatePageModel(database.Context);
+        var missingId = Guid.NewGuid();
+
+        var result = await model.OnPostDeleteWorkAsync(missingId, CancellationToken.None);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Library/Index", redirect.PageName);
+        Assert.True(model.TempData.ContainsKey("LibraryError"));
+        Assert.Contains("not found", (string)model.TempData["LibraryError"]!);
+    }
+
+    private static DetailsModel CreatePageModel(
+        Kiseki.Core.ImmersionDbContext context,
+        Kiseki.Core.Services.ILibraryManagementService? libraryService = null)
+    {
+        var httpContext = new DefaultHttpContext();
+        return new DetailsModel(context, libraryService)
+        {
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new TestTempDataProvider())
+        };
+    }
+
+    private sealed class TestTempDataProvider : ITempDataProvider
+    {
+        private IDictionary<string, object> _values = new Dictionary<string, object>();
+
+        public IDictionary<string, object> LoadTempData(HttpContext context) => _values;
+
+        public void SaveTempData(HttpContext context, IDictionary<string, object> values) =>
+            _values = new Dictionary<string, object>(values);
+    }
+
 
     private sealed class TestDatabase : IAsyncDisposable
     {

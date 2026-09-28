@@ -42,6 +42,10 @@ public interface ISeriesService
         Guid installmentId,
         CancellationToken cancellationToken = default);
 
+    Task DeleteSeriesAsync(
+        Guid seriesId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<MediaSeries>> GetAllSeriesAsync(
         MediaType? mediaType = null,
         string? search = null,

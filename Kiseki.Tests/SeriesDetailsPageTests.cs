@@ -233,6 +233,70 @@ public sealed class SeriesDetailsPageTests
         Assert.Empty(await db.Context.SeriesInstallments.ToListAsync());
     }
 
+    [Fact]
+    public async Task DeleteSeries_SuccessfullyDeletesSeriesAndRedirectsToSeriesIndex()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var series = new MediaSeries("Spice and Wolf", MediaType.Book);
+        var inst = new SeriesInstallment(series.Id, 1, "Volume 1", 101, 100_000);
+        series.Installments.Add(inst);
+
+        var work = new MediaWork("Spice and Wolf Vol 1", mediaType: MediaType.Book)
+        {
+            MediaSeriesId = series.Id
+        };
+        var log = new ImmersionLog
+        {
+            MediaWorkId = work.Id,
+            Date = new DateOnly(2026, 1, 1),
+            CharactersRead = 5000,
+            TimeSpentMinutes = 30.0
+        };
+        work.Logs.Add(log);
+        inst.MediaWorkId = work.Id;
+        inst.MediaWork = work;
+
+        db.Context.MediaSeries.Add(series);
+        db.Context.MediaWorks.Add(work);
+        await db.Context.SaveChangesAsync();
+
+        var service = new SeriesService(db.Context, new StubJitenApiClient());
+        var page = CreatePageModel(service);
+
+        var result = await page.OnPostDeleteSeriesAsync(series.Id);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Series/Index", redirect.PageName);
+        Assert.Equal("Deleted series “Spice and Wolf”.", page.TempData["SeriesNotice"]);
+
+        db.Context.ChangeTracker.Clear();
+
+        Assert.Null(await db.Context.MediaSeries.FindAsync(series.Id));
+        Assert.Null(await db.Context.SeriesInstallments.FindAsync(inst.Id));
+
+        var persistedWork = await db.Context.MediaWorks
+            .Include(w => w.Logs)
+            .SingleAsync(w => w.Id == work.Id);
+        Assert.Null(persistedWork.MediaSeriesId);
+        Assert.Single(persistedWork.Logs);
+    }
+
+    [Fact]
+    public async Task DeleteSeries_NonExistentSeries_RedirectsToSeriesIndexWithError()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var service = new SeriesService(db.Context, new StubJitenApiClient());
+        var page = CreatePageModel(service);
+
+        var missingId = Guid.NewGuid();
+        var result = await page.OnPostDeleteSeriesAsync(missingId);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Series/Index", redirect.PageName);
+        Assert.True(page.TempData.ContainsKey("SeriesNotice"));
+        Assert.Contains("not found", (string)page.TempData["SeriesNotice"]!);
+    }
+
     private static DetailsModel CreatePageModel(ISeriesService seriesService, IReadingPaceService? paceService = null)
     {
         var httpContext = new DefaultHttpContext();

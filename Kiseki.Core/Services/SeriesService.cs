@@ -301,6 +301,51 @@ public class SeriesService : ISeriesService
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task DeleteSeriesAsync(
+        Guid seriesId,
+        CancellationToken cancellationToken = default)
+    {
+        var series = await _dbContext.MediaSeries
+            .Include(s => s.Installments)
+            .Include(s => s.Works)
+            .FirstOrDefaultAsync(s => s.Id == seriesId, cancellationToken);
+
+        if (series == null)
+        {
+            throw new InvalidOperationException($"Series '{seriesId}' not found.");
+        }
+
+        // 1. Unlink any works pointing directly to this series so books and reading history are preserved
+        foreach (var work in series.Works)
+        {
+            work.MediaSeriesId = null;
+        }
+
+        var otherLinkedWorks = await _dbContext.MediaWorks
+            .Where(w => w.MediaSeriesId == seriesId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var work in otherLinkedWorks)
+        {
+            work.MediaSeriesId = null;
+        }
+
+        // 2. Unlink installments from media works
+        foreach (var installment in series.Installments)
+        {
+            installment.MediaWorkId = null;
+            installment.MediaWork = null;
+        }
+
+        // 3. Remove all installments
+        _dbContext.SeriesInstallments.RemoveRange(series.Installments);
+
+        // 4. Remove series
+        _dbContext.MediaSeries.Remove(series);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<MediaSeries>> GetAllSeriesAsync(
         MediaType? mediaType = null,
         string? search = null,

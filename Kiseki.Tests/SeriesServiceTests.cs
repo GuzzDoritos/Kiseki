@@ -386,6 +386,66 @@ public sealed class SeriesServiceTests
         Assert.Equal(2, result[0].Installments[1].SequenceNumber);
     }
 
+    [Fact]
+    public async Task DeleteSeriesAsync_Throws_WhenSeriesNotFound()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var service = new SeriesService(db.Context, new StubJitenApiClient());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.DeleteSeriesAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task DeleteSeriesAsync_DeletesSeriesAndInstallments_PreservesLinkedWorksAndLogs()
+    {
+        await using var db = await TestDatabase.CreateAsync();
+        var series = new MediaSeries("Spice and Wolf", MediaType.Book);
+        var installment = new SeriesInstallment(series.Id, sequenceNumber: 1, title: "Vol 1", jitenCharacterCount: 50_000);
+        series.Installments.Add(installment);
+
+        var work = new MediaWork("Spice and Wolf Vol 1", mediaType: MediaType.Book)
+        {
+            MediaSeriesId = series.Id
+        };
+        var log = new ImmersionLog
+        {
+            MediaWorkId = work.Id,
+            Date = DateOnly.FromDateTime(DateTime.Today),
+            CharactersRead = 5000,
+            TimeSpentMinutes = 30.0
+        };
+        work.Logs.Add(log);
+
+        installment.MediaWorkId = work.Id;
+        installment.MediaWork = work;
+
+        db.Context.MediaSeries.Add(series);
+        db.Context.MediaWorks.Add(work);
+        await db.Context.SaveChangesAsync();
+
+        var service = new SeriesService(db.Context, new StubJitenApiClient());
+        await service.DeleteSeriesAsync(series.Id);
+
+        db.Context.ChangeTracker.Clear();
+
+        // Series should be gone
+        var persistedSeries = await db.Context.MediaSeries.FindAsync(series.Id);
+        Assert.Null(persistedSeries);
+
+        // Installment should be gone
+        var persistedInstallment = await db.Context.SeriesInstallments.FindAsync(installment.Id);
+        Assert.Null(persistedInstallment);
+
+        // Work should still exist, but MediaSeriesId unlinked to null
+        var persistedWork = await db.Context.MediaWorks
+            .Include(w => w.Logs)
+            .SingleAsync(w => w.Id == work.Id);
+        Assert.Null(persistedWork.MediaSeriesId);
+        Assert.Single(persistedWork.Logs);
+        Assert.Equal(5000, persistedWork.CurrentCharactersRead);
+    }
+
     private static JitenDeckDetailDTO CreateMultiVolumeDetail(int parentDeckId, int volumeCount)
     {
         var subdecks = new List<JitenDeckDTO>();
