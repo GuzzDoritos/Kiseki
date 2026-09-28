@@ -96,6 +96,22 @@ public sealed class TtsuDataLoader
                     combinedFolderBooks[0].CoverImage = coverFilePath;
                 }
             }
+            else if (combinedFolderBooks.Count == 0 && (coverFilePath is not null || progressEntries.Count > 0))
+            {
+                var folderTitle = Path.GetFileName(bookDirectory)?.Trim();
+                if (!string.IsNullOrWhiteSpace(folderTitle))
+                {
+                    var zeroLogBook = new TtsuBookContainer
+                    {
+                        Title = folderTitle,
+                        FolderHint = folderTitle,
+                        CoverImage = coverFilePath ?? string.Empty,
+                        Entries = []
+                    };
+                    zeroLogBook.ProgressEntries.AddRange(progressEntries);
+                    combinedFolderBooks = [zeroLogBook];
+                }
+            }
             books.AddRange(combinedFolderBooks);
         }
         return TtsuStatisticsNormalizer.CombineFiles(books);

@@ -7,8 +7,10 @@ using Kiseki.Core.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Kiseki.Web.Models;
 using Kiseki.Web.Pages.Import;
 using Kiseki.Web.Services;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Kiseki.Tests;
 
@@ -332,6 +334,201 @@ public sealed class TtsuCoverImportTests
 
             context.ChangeTracker.Clear();
             var work = await context.MediaWorks.SingleAsync();
+            Assert.Equal(book.CoverUrl, work.CoverUrl);
+            Assert.Equal(MediaCoverSource.Ttsu, work.CoverSource);
+        }
+        finally
+        {
+            if (Directory.Exists(tempWebRoot))
+            {
+                Directory.Delete(tempWebRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LoadDirectoryAsync_FolderWithCoverOnly_CreatesBookWithFolderTitleAndCover()
+    {
+        var loader = new TtsuDataLoader();
+        var rootPath = Path.Combine(Path.GetTempPath(), "Kiseki.Tests", Guid.NewGuid().ToString("N"));
+        var bookPath = Directory.CreateDirectory(Path.Combine(rootPath, "Unread Novel Volume 1")).FullName;
+
+        try
+        {
+            var coverPath = Path.Combine(bookPath, "cover_123.jpeg");
+            await File.WriteAllBytesAsync(coverPath, [0xFF, 0xD8, 0xFF, 0xE0]);
+
+            var books = await loader.LoadDirectoryAsync(rootPath);
+
+            var book = Assert.Single(books);
+            Assert.Equal("Unread Novel Volume 1", book.Title);
+            Assert.Equal(coverPath, book.CoverImage);
+            Assert.Empty(book.Entries);
+            Assert.Empty(book.ProgressEntries);
+        }
+        finally
+        {
+            if (Directory.Exists(rootPath))
+            {
+                Directory.Delete(rootPath, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LoadDirectoryAsync_FolderWithCoverAndProgress_CreatesBookWithCoverAndProgress()
+    {
+        var loader = new TtsuDataLoader();
+        var rootPath = Path.Combine(Path.GetTempPath(), "Kiseki.Tests", Guid.NewGuid().ToString("N"));
+        var bookPath = Directory.CreateDirectory(Path.Combine(rootPath, "Novel With Bookmark")).FullName;
+
+        try
+        {
+            var coverPath = Path.Combine(bookPath, "cover_456.jpeg");
+            await File.WriteAllBytesAsync(coverPath, [0xFF, 0xD8, 0xFF, 0xE0]);
+            var progressJson = "{\"exploredCharCount\":5000,\"progress\":0.10}";
+            await File.WriteAllTextAsync(Path.Combine(bookPath, "progress_1_6_100.json"), progressJson);
+
+            var books = await loader.LoadDirectoryAsync(rootPath);
+
+            var book = Assert.Single(books);
+            Assert.Equal("Novel With Bookmark", book.Title);
+            Assert.Equal(coverPath, book.CoverImage);
+            Assert.Empty(book.Entries);
+            Assert.Single(book.ProgressEntries);
+            Assert.Equal(5000, book.ProgressEntries[0].ExploredCharacterCount);
+        }
+        finally
+        {
+            if (Directory.Exists(rootPath))
+            {
+                Directory.Delete(rootPath, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WebPreviewAndConfirm_FolderWithCoverOnly_ImportsWorkWithCoverAndZeroLogs()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ImmersionDbContext>().UseSqlite(connection).Options;
+        await using var context = new ImmersionDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        var tempWebRoot = Path.Combine(Path.GetTempPath(), "Kiseki.WebTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempWebRoot);
+
+        try
+        {
+            var envMock = new StubHostEnvironment { WebRootPath = tempWebRoot };
+            var batchStore = new TtsuImportBatchStore(new MemoryCache(new MemoryCacheOptions()));
+            var dataLoader = new TtsuDataLoader();
+            var matchService = new TtsuImportPageTests.StubJitenMatchService();
+            var resolver = new TtsuImportPageTests.StubJitenSelectionResolver();
+
+            var httpContext = new DefaultHttpContext();
+            var model = new TtsuModel(
+                dataLoader,
+                batchStore,
+                context,
+                matchService,
+                resolver,
+                environment: envMock)
+            {
+                PageContext = new Microsoft.AspNetCore.Mvc.RazorPages.PageContext { HttpContext = httpContext },
+                TempData = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(httpContext, new TestTempDataProvider())
+            };
+
+            using var coverStream = new MemoryStream([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]);
+            var coverFile = new FormFile(coverStream, 0, coverStream.Length, "FolderFiles", "ttu-reader-data/Unread Light Novel/cover_novel.jpeg");
+
+            model.FolderFiles = [coverFile];
+            await model.OnPostPreviewAsync(CancellationToken.None);
+
+            var book = Assert.Single(model.Books);
+            Assert.Equal("Unread Light Novel", book.Title);
+            Assert.NotNull(book.CoverUrl);
+            Assert.StartsWith("/covers/cover_", book.CoverUrl);
+            Assert.Empty(model.Warnings);
+
+            // Confirm import
+            await model.OnPostConfirmAsync(CancellationToken.None);
+
+            context.ChangeTracker.Clear();
+            var work = await context.MediaWorks.Include(w => w.Logs).SingleAsync();
+            Assert.Equal("Unread Light Novel", work.Title);
+            Assert.Equal(book.CoverUrl, work.CoverUrl);
+            Assert.Equal(MediaCoverSource.Ttsu, work.CoverSource);
+            Assert.Empty(work.Logs);
+        }
+        finally
+        {
+            if (Directory.Exists(tempWebRoot))
+            {
+                Directory.Delete(tempWebRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WebPreviewAndConfirm_FolderWithCoverOnly_MatchesAndUpdatesExistingLibraryWorkCover()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<ImmersionDbContext>().UseSqlite(connection).Options;
+        await using var context = new ImmersionDbContext(options);
+        await context.Database.EnsureCreatedAsync();
+
+        // Create an existing book without a cover in the library
+        var existingWork = new MediaWork("Existing Series Vol 1");
+        context.MediaWorks.Add(existingWork);
+        await context.SaveChangesAsync();
+
+        var tempWebRoot = Path.Combine(Path.GetTempPath(), "Kiseki.WebTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempWebRoot);
+
+        try
+        {
+            var envMock = new StubHostEnvironment { WebRootPath = tempWebRoot };
+            var batchStore = new TtsuImportBatchStore(new MemoryCache(new MemoryCacheOptions()));
+            var dataLoader = new TtsuDataLoader();
+            var matchService = new TtsuImportPageTests.StubJitenMatchService();
+            var resolver = new TtsuImportPageTests.StubJitenSelectionResolver();
+
+            var httpContext = new DefaultHttpContext();
+            var model = new TtsuModel(
+                dataLoader,
+                batchStore,
+                context,
+                matchService,
+                resolver,
+                environment: envMock)
+            {
+                PageContext = new Microsoft.AspNetCore.Mvc.RazorPages.PageContext { HttpContext = httpContext },
+                TempData = new Microsoft.AspNetCore.Mvc.ViewFeatures.TempDataDictionary(httpContext, new TestTempDataProvider())
+            };
+
+            using var coverStream = new MemoryStream([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]);
+            var coverFile = new FormFile(coverStream, 0, coverStream.Length, "FolderFiles", "ttu-reader-data/Existing Series Vol 1/cover_vol1.jpeg");
+
+            model.FolderFiles = [coverFile];
+            await model.OnPostPreviewAsync(CancellationToken.None);
+
+            var book = Assert.Single(model.Books);
+            Assert.Equal("Existing Series Vol 1", book.Title);
+            Assert.NotNull(book.CoverUrl);
+
+            // Selection should automatically pre-select updating the existing work
+            var selection = Assert.Single(model.Selections);
+            Assert.Equal(existingWork.Id, selection.TargetId);
+            Assert.Equal(TtsuImportMode.Merge, selection.Mode);
+
+            // Confirm import
+            await model.OnPostConfirmAsync(CancellationToken.None);
+
+            context.ChangeTracker.Clear();
+            var work = await context.MediaWorks.SingleAsync(w => w.Id == existingWork.Id);
             Assert.Equal(book.CoverUrl, work.CoverUrl);
             Assert.Equal(MediaCoverSource.Ttsu, work.CoverSource);
         }

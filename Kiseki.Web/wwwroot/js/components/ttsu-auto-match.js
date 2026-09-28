@@ -167,8 +167,10 @@ export function initTtsuAutoMatchProgress() {
                 return;
             }
 
-            // Continue loop with next pending book
-            fetchNext();
+            // Continue loop with next pending book with a polite pause to respect Jiten rate limits
+            setTimeout(() => {
+                fetchNext();
+            }, 350);
         } catch (err) {
             if (err.name === 'AbortError') return;
             isRunning = false;

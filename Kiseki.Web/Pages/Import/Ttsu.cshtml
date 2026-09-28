@@ -24,21 +24,53 @@
     </aside>
 }
 <section class="content-card ttsu-upload-card">
-    <form method="post" enctype="multipart/form-data" asp-page-handler="Preview">
+    <form method="post" enctype="multipart/form-data" asp-page-handler="Preview" id="ttsuUploadForm">
         <div class="ttsu-folder-picker">
             <svg class="ttsu-upload-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3.5 7.5h6l1.8 2h9.2v8.75A2.25 2.25 0 0 1 18.25 20H5.75a2.25 2.25 0 0 1-2.25-2.25V7.5Z"></path><path d="M12 16V6m-3 3 3-3 3 3"></path></svg>
-            <div class="ttsu-picker-copy"><strong>Select your TTSU data folder</strong><span data-ttsu-selection-summary>Statistics, progress, and cover files will be processed.</span></div>
-            <input class="visually-hidden" asp-for="FolderFiles" type="file" webkitdirectory multiple data-ttsu-folder-input />
-            <label class="btn btn-outline-secondary" asp-for="FolderFiles">Choose folder</label>
+            <div class="ttsu-picker-copy">
+                <strong>Select your TTSU data folder or files</strong>
+                <span data-ttsu-selection-summary>Choose a folder or select specific files. You can choose which books to import.</span>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <input class="visually-hidden" asp-for="FolderFiles" type="file" webkitdirectory multiple data-ttsu-folder-input id="ttsuFolderInput" />
+                <label class="btn btn-outline-secondary btn-sm" for="ttsuFolderInput">Choose folder</label>
+                <input class="visually-hidden" type="file" multiple data-ttsu-files-input id="ttsuFilesInput" />
+                <label class="btn btn-outline-secondary btn-sm" for="ttsuFilesInput">Choose files</label>
+            </div>
         </div>
-        <div class="form-check ttsu-auto-match-option">
+
+        <!-- Dynamic Book Selection Panel (revealed when multiple books or files are selected) -->
+        <div class="ttsu-book-selection-panel mt-3" data-ttsu-book-panel hidden>
+            <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <strong class="ttsu-detected-heading" data-ttsu-detected-count>Detected 0 books</strong>
+                    <span class="badge bg-secondary-subtle text-light" data-ttsu-selected-count>0 selected</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-ttsu-select-all>Select all</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-ttsu-deselect-all>Deselect all</button>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <input type="text" class="form-control form-control-sm" placeholder="Filter detected books by title..." data-ttsu-book-filter autocomplete="off" />
+            </div>
+
+            <div class="ttsu-book-checkbox-list" data-ttsu-book-list>
+                <!-- Populated dynamically via JS -->
+            </div>
+        </div>
+
+        <div class="form-check ttsu-auto-match-option mt-3">
             <input class="form-check-input" type="checkbox" asp-for="AutoMatchMetadata" data-ttsu-auto-match />
             <label class="form-check-label" asp-for="AutoMatchMetadata">
                 Auto-match metadata with Jiten
             </label>
             <span class="form-text d-block">Search Jiten.moe for matching titles and volume numbers to suggest book covers and character counts.</span>
         </div>
-        <div class="form-actions"><button class="btn btn-primary" type="submit">Preview books</button></div>
+        <div class="form-actions mt-3">
+            <button class="btn btn-primary" type="submit" data-ttsu-preview-btn>Preview books</button>
+        </div>
     </form>
 </section>
 @if (Model.HasPreview)
@@ -93,6 +125,14 @@
 
         <form method="post" asp-page-handler="Confirm" id="ttsuReviewForm">
             <input type="hidden" asp-for="BatchId" />
+            <div class="ttsu-review-toolbar d-flex align-items-center justify-content-between mb-3 p-2 rounded" style="background: var(--color-surface); border: 1px solid var(--color-edge-subtle);">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted">Batch:</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-review-select-all>Select all</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-review-deselect-all>Deselect all</button>
+                </div>
+                <span class="small text-muted" data-review-selected-count></span>
+            </div>
             <div class="ttsu-book-list">
             @for (var index = 0; index < Model.Books.Count; index++)
             {

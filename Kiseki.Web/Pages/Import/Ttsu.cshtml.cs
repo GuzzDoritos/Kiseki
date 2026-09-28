@@ -31,7 +31,7 @@ public sealed class TtsuModel(
     IWebHostEnvironment? environment = null) : PageModel
 {
     private const long MaxRequestBytes = 64 * 1024 * 1024;
-    private static readonly TimeSpan PerBookJitenBudget = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan PerBookJitenBudget = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan PerBookCoverBudget = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan CoverEnrichmentTimeBudget = TimeSpan.FromSeconds(20);
     private readonly TtsuImportService _imports = new(dbContext);
@@ -72,10 +72,9 @@ public sealed class TtsuModel(
         var files = FolderFiles.Where(file => TtsuDataLoader.IsStatisticsFileName(file.FileName) ||
             TtsuDataLoader.IsProgressFileName(file.FileName) ||
             TtsuDataLoader.IsCoverFilename(file.FileName)).ToList();
-        var statisticsFileCount = files.Count(file => TtsuDataLoader.IsStatisticsFileName(file.FileName));
-        if (statisticsFileCount == 0 || statisticsFileCount > 250 || files.Count > 1000)
+        if (files.Count == 0 || files.Count > 1000)
         {
-            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with statistics files and no more than 250 books.");
+            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with statistics, progress, or cover files and no more than 250 books.");
             return Page();
         }
         var parsed = new List<TtsuBookContainer>();
@@ -134,12 +133,43 @@ public sealed class TtsuModel(
                 Warnings.Add($"{path} was skipped: {exception.Message}");
             }
         }
-        if (parsed.Count == 0)
+        var combined = TtsuStatisticsNormalizer.CombineFiles(parsed).ToList();
+
+        // Synthesize book candidates for folders that have a cover or progress but no statistics file
+        var unassociatedFolderHints = coversByFolder.Keys
+            .Union(progressByFolder.Keys, StringComparer.OrdinalIgnoreCase)
+            .Where(hint => !string.IsNullOrWhiteSpace(hint) &&
+                           !combined.Any(b => string.Equals(b.FolderHint ?? string.Empty, hint, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var folderHint in unassociatedFolderHints)
         {
-            ModelState.AddModelError(nameof(FolderFiles), "None of the detected statistics files could be read.");
+            var folderTitle = folderHint.Contains('/')
+                ? folderHint[(folderHint.LastIndexOf('/') + 1)..].Trim()
+                : folderHint.Trim();
+
+            if (!string.IsNullOrWhiteSpace(folderTitle))
+            {
+                combined.Add(new TtsuBookContainer
+                {
+                    Title = folderTitle,
+                    FolderHint = folderHint,
+                    Entries = []
+                });
+            }
+        }
+
+        if (combined.Count == 0)
+        {
+            ModelState.AddModelError(nameof(FolderFiles), "None of the detected statistics, progress, or cover files could be read.");
             return Page();
         }
-        var combined = TtsuStatisticsNormalizer.CombineFiles(parsed).ToList();
+
+        if (combined.Count > 250)
+        {
+            ModelState.AddModelError(nameof(FolderFiles), "Choose a TTSU folder with statistics files and no more than 250 books.");
+            return Page();
+        }
         foreach (var (folderHint, progressEntries) in progressByFolder)
         {
             var matches = combined.Where(book => string.Equals(book.FolderHint ?? string.Empty,
@@ -620,7 +650,7 @@ public sealed class TtsuModel(
         return false;
     }
 
-    private readonly record struct TargetProtectionInfo(bool HasBinding, bool HasJitenLink, bool HasCover);
+    private readonly record struct TargetProtectionInfo(bool HasJitenLink);
 
     private static (bool IsEligible, string? IneligibilityReason) EvaluateTargetProtection(
         TtsuImportMode mode,
@@ -642,17 +672,9 @@ public sealed class TtsuModel(
             return (false, "The selected target is no longer available.");
         }
 
-        if (info.HasBinding)
-        {
-            return (false, "Target already has a confirmed TTSU binding.");
-        }
         if (info.HasJitenLink)
         {
             return (false, "Target is already linked to Jiten.");
-        }
-        if (info.HasCover)
-        {
-            return (false, "Target already has an existing cover.");
         }
 
         return (true, null);
@@ -699,13 +721,11 @@ public sealed class TtsuModel(
             .Select(w => new
             {
                 w.Id,
-                w.HasJitenLink,
-                HasCover = w.CoverUrl != null,
-                HasBinding = dbContext.TtsuBindings.Any(b => b.MediaWorkId == w.Id)
+                w.HasJitenLink
             })
             .ToDictionaryAsync(
                 w => w.Id,
-                w => new TargetProtectionInfo(w.HasBinding, w.HasJitenLink, w.HasCover),
+                w => new TargetProtectionInfo(w.HasJitenLink),
                 cancellationToken);
 
         var books = new List<TtsuBookPreviewViewModel>();
@@ -1257,11 +1277,10 @@ public sealed class TtsuModel(
             .Select(work => new
             {
                 work.HasCover,
-                work.HasJitenLink,
-                HasBinding = dbContext.TtsuBindings.Any(binding => binding.MediaWorkId == work.Id)
+                work.HasJitenLink
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        return targetState is not ({ HasCover: true } or { HasJitenLink: true } or { HasBinding: true });
+        return targetState is not ({ HasCover: true } or { HasJitenLink: true });
     }
 }
