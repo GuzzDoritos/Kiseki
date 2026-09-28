@@ -30,7 +30,26 @@ public static class SqliteSchemaUpgrade
                 "UnchangedDays" INTEGER NOT NULL, "StaleDays" INTEGER NOT NULL,
                 "ProgressUpdates" INTEGER NOT NULL DEFAULT 0, "CharacterTotalUpdates" INTEGER NOT NULL DEFAULT 0,
                 "MetadataLinks" INTEGER NOT NULL DEFAULT 0, "MetadataSkips" INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS "SeriesInstallments" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_SeriesInstallments" PRIMARY KEY,
+                "MediaSeriesId" TEXT NOT NULL,
+                "SequenceNumber" INTEGER NOT NULL,
+                "Title" TEXT NOT NULL,
+                "JitenSubdeckId" INTEGER NULL,
+                "JitenCharacterCount" INTEGER NOT NULL,
+                "CoverUrl" TEXT NULL,
+                "MediaWorkId" TEXT NULL,
+                CONSTRAINT "FK_SeriesInstallments_MediaSeries_MediaSeriesId" FOREIGN KEY ("MediaSeriesId") REFERENCES "MediaSeries" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_SeriesInstallments_MediaWorks_MediaWorkId" FOREIGN KEY ("MediaWorkId") REFERENCES "MediaWorks" ("Id") ON DELETE SET NULL);
+            CREATE INDEX IF NOT EXISTS "IX_SeriesInstallments_MediaSeriesId" ON "SeriesInstallments" ("MediaSeriesId");
+            CREATE INDEX IF NOT EXISTS "IX_SeriesInstallments_MediaWorkId" ON "SeriesInstallments" ("MediaWorkId");
+            CREATE INDEX IF NOT EXISTS "IX_SeriesInstallments_JitenSubdeckId" ON "SeriesInstallments" ("JitenSubdeckId");
             """, cancellationToken);
+
+        var seriesColumns = await GetColumnsAsync(context, transaction, "MediaSeries", cancellationToken);
+        if (!seriesColumns.Contains("CoverUrl"))
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE \"MediaSeries\" ADD COLUMN \"CoverUrl\" TEXT NULL;", cancellationToken);
+
         var logColumns = await GetColumnsAsync(context, transaction, "ImmersionLogs", cancellationToken);
         if (!logColumns.Contains("TtsuBindingId"))
             await context.Database.ExecuteSqlRawAsync("""

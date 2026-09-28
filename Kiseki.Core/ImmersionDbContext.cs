@@ -12,6 +12,7 @@ namespace Kiseki.Core
         public DbSet<MediaWork> MediaWorks { get; set; }
 
         public DbSet<ImmersionLog> ImmersionLogs { get; set; }
+        public DbSet<SeriesInstallment> SeriesInstallments { get; set; }
         public DbSet<TtsuBinding> TtsuBindings { get; set; }
         public DbSet<TtsuImportReceipt> TtsuImportReceipts { get; set; }
 
@@ -90,12 +91,33 @@ namespace Kiseki.Core
             modelBuilder.Entity<MediaSeries>(entity =>
             {
                 entity.Property(series => series.Title).IsRequired();
+                entity.Property(series => series.CoverUrl).HasMaxLength(2048);
                 entity.HasIndex(series => series.FranchiseId);
                 entity.HasIndex(series => series.JitenDeckId);
 
                 entity.HasOne(series => series.Franchise)
                     .WithMany(franchise => franchise.Series)
                     .HasForeignKey(series => series.FranchiseId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<SeriesInstallment>(entity =>
+            {
+                entity.Property(installment => installment.Title).IsRequired();
+                entity.Property(installment => installment.CoverUrl).HasMaxLength(2048);
+
+                entity.HasIndex(installment => installment.MediaSeriesId);
+                entity.HasIndex(installment => installment.MediaWorkId);
+                entity.HasIndex(installment => installment.JitenSubdeckId);
+
+                entity.HasOne(installment => installment.MediaSeries)
+                    .WithMany(series => series.Installments)
+                    .HasForeignKey(installment => installment.MediaSeriesId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(installment => installment.MediaWork)
+                    .WithMany()
+                    .HasForeignKey(installment => installment.MediaWorkId)
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
