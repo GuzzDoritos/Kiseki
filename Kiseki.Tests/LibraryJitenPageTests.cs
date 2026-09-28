@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Kiseki.Tests;
 
@@ -353,6 +354,21 @@ public sealed class LibraryJitenPageTests
         var result = await model.OnGetAsync(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result);
+    }
+
+    [Fact]
+    public async Task LinkJitenModel_CanBeActivatedByDependencyInjection()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var services = new ServiceCollection();
+        services.AddScoped(_ => database.Context);
+        services.AddScoped<IJitenApiClient>(_ => new StubJitenApiClient());
+        services.AddScoped<IJitenSelectionResolver, JitenSelectionResolver>();
+
+        var provider = services.BuildServiceProvider();
+        var model = ActivatorUtilities.CreateInstance<LinkJitenModel>(provider);
+
+        Assert.NotNull(model);
     }
 
     private static LinkJitenModel CreateLinkModel(

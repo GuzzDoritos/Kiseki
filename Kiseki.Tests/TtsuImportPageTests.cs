@@ -705,10 +705,10 @@ public sealed class TtsuImportPageTests
     }
 
     [Fact]
-    public async Task Preview_TargetProtection_ExistingBindingLinkAndCoverEachDisableApplication()
+    public async Task Preview_TargetProtection_OnlyExistingJitenLinkDisablesApplication()
     {
         await using var database = await TestDatabase.CreateAsync();
-        // Target 1 has binding
+        // Target 1 has binding (no Jiten link)
         var workWithBinding = new Kiseki.Core.Entities.MediaWork("Book with binding");
         database.Context.MediaWorks.Add(workWithBinding);
         database.Context.TtsuBindings.Add(new() { MediaWorkId = workWithBinding.Id, OriginalTitle = "Book with binding" });
@@ -717,7 +717,7 @@ public sealed class TtsuImportPageTests
         var workWithLink = new Kiseki.Core.Entities.MediaWork("Book with link", jitenDeckId: 999);
         database.Context.MediaWorks.Add(workWithLink);
 
-        // Target 3 has cover
+        // Target 3 has cover (no Jiten link)
         var workWithCover = new Kiseki.Core.Entities.MediaWork("Book with cover");
         workWithCover.UpdateCoverUrl("https://example.com/cover.jpg");
         database.Context.MediaWorks.Add(workWithCover);
@@ -734,7 +734,7 @@ public sealed class TtsuImportPageTests
             }
         };
 
-        // Test with Target 1 (binding)
+        // Test with Target 1 (binding - should be eligible)
         using var s1 = File.OpenRead(GetFixturePath());
         var m1 = CreateModel(database.Context, matchService);
         m1.AutoMatchMetadata = true;
@@ -744,11 +744,11 @@ public sealed class TtsuImportPageTests
         m1.Selections[0].Mode = TtsuImportMode.Merge;
         m1.Selections[0].TargetId = workWithBinding.Id;
         await m1.OnPostReviewAsync(CancellationToken.None);
-        Assert.False(m1.Books[0].Enrichment!.IsMetadataApplicationEligible);
-        Assert.Contains("binding", m1.Books[0].Enrichment!.IneligibilityReason, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(m1.Selections[0].CandidateKey);
+        Assert.True(m1.Books[0].Enrichment!.IsMetadataApplicationEligible);
+        Assert.Null(m1.Books[0].Enrichment!.IneligibilityReason);
+        Assert.NotNull(m1.Selections[0].CandidateKey);
 
-        // Test with Target 2 (Jiten link)
+        // Test with Target 2 (Jiten link - should be protected / disabled)
         using var s2 = File.OpenRead(GetFixturePath());
         var m2 = CreateModel(database.Context, matchService);
         m2.AutoMatchMetadata = true;
@@ -762,7 +762,7 @@ public sealed class TtsuImportPageTests
         Assert.Contains("Jiten", m2.Books[0].Enrichment!.IneligibilityReason, StringComparison.OrdinalIgnoreCase);
         Assert.Null(m2.Selections[0].CandidateKey);
 
-        // Test with Target 3 (Cover)
+        // Test with Target 3 (Cover - should be eligible)
         using var s3 = File.OpenRead(GetFixturePath());
         var m3 = CreateModel(database.Context, matchService);
         m3.AutoMatchMetadata = true;
@@ -772,9 +772,9 @@ public sealed class TtsuImportPageTests
         m3.Selections[0].Mode = TtsuImportMode.Merge;
         m3.Selections[0].TargetId = workWithCover.Id;
         await m3.OnPostReviewAsync(CancellationToken.None);
-        Assert.False(m3.Books[0].Enrichment!.IsMetadataApplicationEligible);
-        Assert.Contains("cover", m3.Books[0].Enrichment!.IneligibilityReason, StringComparison.OrdinalIgnoreCase);
-        Assert.Null(m3.Selections[0].CandidateKey);
+        Assert.True(m3.Books[0].Enrichment!.IsMetadataApplicationEligible);
+        Assert.Null(m3.Books[0].Enrichment!.IneligibilityReason);
+        Assert.NotNull(m3.Selections[0].CandidateKey);
     }
 
     [Fact]
@@ -822,6 +822,74 @@ public sealed class TtsuImportPageTests
 
         // Recomputed -> eligible again
         Assert.True(model.Books[0].Enrichment!.IsMetadataApplicationEligible);
+    }
+
+    [Fact]
+    public async Task PreviewAndConfirm_TargetWithExistingTtsuBindingAndCover_IsEligibleAndSuccessfullyLinksJitenDeck()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var existingWork = new Kiseki.Core.Entities.MediaWork("Test Book");
+        existingWork.UpdateCoverUrl("https://example.com/folder-cover.jpg");
+        database.Context.MediaWorks.Add(existingWork);
+        database.Context.TtsuBindings.Add(new()
+        {
+            MediaWorkId = existingWork.Id,
+            OriginalTitle = "Test Book",
+            FolderHint = "test_book_hint"
+        });
+        await database.Context.SaveChangesAsync();
+
+        using var fixtureStream = File.OpenRead(GetFixturePath());
+        var matchService = new StubJitenMatchService
+        {
+            Handler = (reqs, _, _) =>
+            {
+                var candidate = CreateCandidate(54904, subdeckId: 54924, title: "Test Book — Volume 20", characters: 135_935);
+                return Task.FromResult<IReadOnlyList<JitenMatchOutcome>>(
+                    [CreateMatchedOutcome(reqs[0].CorrelationId, MatchConfidence.High, CreateScored(candidate, 100))]);
+            }
+        };
+
+        var resolver = new StubJitenSelectionResolver
+        {
+            Handler = (deckId, subdeckId, _) => Task.FromResult(JitenSelectionResult.Succeeded(
+                new JitenMediaSelection(deckId, subdeckId, "Test Book — Volume 20", "Test Book 20 Romaji", "Test Book 20 English", 135_935, "https://cdn.jiten.moe/rezero20.jpg", 0, JitenCoverEvidence.Specific)))
+        };
+
+        var model = CreateModel(database.Context, matchService, resolver);
+        model.AutoMatchMetadata = true;
+        model.FolderFiles = [StatisticsFile(fixtureStream)];
+        await model.OnPostPreviewAsync(CancellationToken.None);
+        await EnrichAllPendingAsync(model);
+
+        // Preview matches existing work
+        Assert.Equal(TtsuImportMode.Merge, model.Selections[0].Mode);
+        Assert.Equal(existingWork.Id, model.Selections[0].TargetId);
+
+        // Metadata application is eligible and candidate is auto-selected
+        Assert.True(model.Books[0].Enrichment!.IsMetadataApplicationEligible);
+        Assert.Null(model.Books[0].Enrichment!.IneligibilityReason);
+        Assert.NotNull(model.Selections[0].CandidateKey);
+
+        // Confirm import
+        var result = await model.OnPostConfirmAsync(CancellationToken.None);
+        Assert.IsType<RedirectToPageResult>(result);
+
+        // Verify database state: work is linked to Jiten, character count is set, cover is preserved
+        database.Context.ChangeTracker.Clear();
+        var updated = await database.Context.MediaWorks
+            .Include(w => w.Logs)
+            .SingleAsync(w => w.Id == existingWork.Id);
+
+        Assert.True(updated.HasJitenLink);
+        Assert.Equal(54904, updated.JitenDeckId);
+        Assert.Equal(54924, updated.JitenSubdeckId);
+        Assert.Equal(135_935, updated.JitenCharacterCount);
+        Assert.Equal("https://example.com/folder-cover.jpg", updated.CoverUrl);
+        Assert.NotEmpty(updated.Logs);
+
+        var binding = await database.Context.TtsuBindings.SingleAsync(b => b.MediaWorkId == existingWork.Id);
+        Assert.NotNull(binding);
     }
 
     [Fact]

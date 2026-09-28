@@ -15,14 +15,10 @@ namespace Kiseki.Web.Pages.Library;
 public sealed class LinkJitenModel(
     ImmersionDbContext dbContext,
     IJitenApiClient jitenApiClient,
-    IJitenSelectionResolver jitenSelectionResolver) : PageModel
+    IJitenSelectionResolver? jitenSelectionResolver = null) : PageModel
 {
-    public LinkJitenModel(
-        ImmersionDbContext dbContext,
-        IJitenApiClient jitenApiClient)
-        : this(dbContext, jitenApiClient, new JitenSelectionResolver(jitenApiClient))
-    {
-    }
+    private readonly IJitenSelectionResolver _jitenSelectionResolver =
+        jitenSelectionResolver ?? new JitenSelectionResolver(jitenApiClient);
 
     public Guid WorkId { get; private set; }
     public string WorkTitle { get; private set; } = string.Empty;
@@ -175,7 +171,7 @@ public sealed class LinkJitenModel(
 
         try
         {
-            var resolution = await jitenSelectionResolver.ResolveAsync(
+            var resolution = await _jitenSelectionResolver.ResolveAsync(
                 Input.ParentDeckId,
                 Input.SubdeckId,
                 cancellationToken);

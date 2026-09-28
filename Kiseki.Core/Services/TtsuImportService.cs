@@ -109,7 +109,7 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                         work.Logs.AddRange(await context.ImmersionLogs.Where(x => request.OrphanLogIds.Contains(x.Id)).ToListAsync(cancellationToken));
 
                     var hasFolderCover = !string.IsNullOrWhiteSpace(request.Book.CoverImage);
-                    if (hasFolderCover && (isNewWork || !work.IsCoverProtected))
+                    if (hasFolderCover && (isNewWork || !work.IsCoverProtected || work.CoverSource == MediaCoverSource.Ttsu))
                     {
                         try
                         {
@@ -124,36 +124,12 @@ public sealed class TtsuImportService(ImmersionDbContext context)
                     {
                         if (request.Metadata.Selection is { } selection)
                         {
-                            if (isNewWork)
+                            if (isNewWork || !work.HasJitenLink)
                             {
                                 selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
                                 receipt.MetadataLinks++;
 
-                                if (!hasFolderCover && request.Metadata.EffectiveCover is { } coverSelection)
-                                {
-                                    try
-                                    {
-                                        if (coverSelection.Provider == Models.Covers.ExternalCoverProvider.OpenLibrary)
-                                        {
-                                            work.ApplyOpenLibraryCover(coverSelection.CoverUrl, coverSelection.ProviderItemId);
-                                        }
-                                        else
-                                        {
-                                            work.ApplyGoogleBooksCover(coverSelection.CoverUrl, coverSelection.ProviderItemId);
-                                        }
-                                    }
-                                    catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-                                    {
-                                        // A cover failure must never fail the transaction
-                                    }
-                                }
-                            }
-                            else if (!work.HasJitenLink && !work.HasCover)
-                            {
-                                selection.ApplyTo(work, JitenTitleChoice.KeepCurrent);
-                                receipt.MetadataLinks++;
-
-                                if (!hasFolderCover && request.Metadata.EffectiveCover is { } coverSelection)
+                                if (!hasFolderCover && !work.HasCover && request.Metadata.EffectiveCover is { } coverSelection)
                                 {
                                     try
                                     {

@@ -480,7 +480,7 @@ public sealed class TtsuMergeServiceTests
     }
 
     [Fact]
-    public async Task ApplyAsync_ExistingCover_PreservedAndCountedAsSkip()
+    public async Task ApplyAsync_ExistingCover_PreservedAndMetadataIsLinked()
     {
         await using var db = await ImportDatabase.CreateAsync();
         var existing = new MediaWork("Book With Cover");
@@ -500,16 +500,56 @@ public sealed class TtsuMergeServiceTests
 
         var receipt = await db.Service.ApplyAsync(Guid.NewGuid(), [request]);
 
-        Assert.Equal(0, receipt.MetadataLinks);
-        Assert.Equal(1, receipt.MetadataSkips);
+        Assert.Equal(1, receipt.MetadataLinks);
+        Assert.Equal(0, receipt.MetadataSkips);
         Assert.Equal(1, receipt.AddedDays);
 
         db.Context.ChangeTracker.Clear();
         var work = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == existing.Id);
-        Assert.False(work.HasJitenLink);
+        Assert.True(work.HasJitenLink);
+        Assert.Equal(10, work.JitenDeckId);
+        Assert.Equal(11, work.JitenSubdeckId);
+        Assert.Equal(50_000, work.JitenCharacterCount);
         Assert.Equal("https://example.com/custom-cover.jpg", work.CoverUrl);
         Assert.Equal(MediaCoverSource.UserOverride, work.CoverSource);
         Assert.Single(work.Logs);
+    }
+
+    [Fact]
+    public async Task ApplyAsync_ExistingWorkWithTtsuBinding_LinksMetadataAndUpdatesBinding()
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var existing = new MediaWork("Re:Zero 20");
+        db.Context.Add(existing);
+        db.Context.TtsuBindings.Add(new() { MediaWorkId = existing.Id, OriginalTitle = "Re:Zero 20", FolderHint = "re_zero_20" });
+        await db.Context.SaveChangesAsync();
+
+        var incoming = Book(Entry(100, 1));
+        var plan = await db.Service.PreviewAsync(incoming, existing.Id);
+        var selection = CreateSelection(54904, 54924, "Re:Zero 20 Jiten", 135_935, "https://cdn.jiten.moe/rezero20.jpg");
+        var request = new TtsuImportRequest(
+            incoming,
+            existing.Id,
+            new Dictionary<DateOnly, string>(),
+            plan.Fingerprint,
+            Metadata: new TtsuMetadataImportRequest(selection));
+
+        var receipt = await db.Service.ApplyAsync(Guid.NewGuid(), [request]);
+
+        Assert.Equal(1, receipt.MetadataLinks);
+        Assert.Equal(0, receipt.MetadataSkips);
+        Assert.Equal(1, receipt.AddedDays);
+
+        db.Context.ChangeTracker.Clear();
+        var work = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == existing.Id);
+        Assert.True(work.HasJitenLink);
+        Assert.Equal(54904, work.JitenDeckId);
+        Assert.Equal(54924, work.JitenSubdeckId);
+        Assert.Equal(135_935, work.JitenCharacterCount);
+        Assert.Single(work.Logs);
+
+        var binding = await db.Context.TtsuBindings.SingleAsync(b => b.MediaWorkId == existing.Id);
+        Assert.NotNull(binding);
     }
 
     public enum ConcurrentAdditionKind
@@ -519,11 +559,8 @@ public sealed class TtsuMergeServiceTests
         LegacyUnknown
     }
 
-    [Theory]
-    [InlineData(ConcurrentAdditionKind.JitenLink)]
-    [InlineData(ConcurrentAdditionKind.UserOverride)]
-    [InlineData(ConcurrentAdditionKind.LegacyUnknown)]
-    public async Task ApplyAsync_ConcurrentLinkOrCoverAddedAfterPreview_DoesNotInvalidateFingerprint_ImportsReadingAndSkipsMetadata(ConcurrentAdditionKind additionKind)
+    [Fact]
+    public async Task ApplyAsync_ConcurrentJitenLinkAddedAfterPreview_DoesNotInvalidateFingerprint_ImportsReadingAndSkipsMetadata()
     {
         await using var db = await ImportDatabase.CreateAsync();
         var existing = new MediaWork("Concurrent Book");
@@ -535,12 +572,51 @@ public sealed class TtsuMergeServiceTests
         var plan = await db.Service.PreviewAsync(incoming, existing.Id);
         var reviewedFingerprint = plan.Fingerprint;
 
-        // 2. Concurrently link the work or add cover
-        if (additionKind == ConcurrentAdditionKind.JitenLink)
-        {
-            existing.LinkToJitenDeck(42, 60_000, "https://example.com/concurrent.jpg");
-        }
-        else if (additionKind == ConcurrentAdditionKind.UserOverride)
+        // 2. Concurrently link the work
+        existing.LinkToJitenDeck(42, 60_000, "https://example.com/concurrent.jpg");
+        await db.Context.SaveChangesAsync();
+
+        // 3. Confirm using the previously reviewed fingerprint and metadata intent
+        var selection = CreateSelection(10, 11, "Other Deck", 70_000, "https://cdn.jiten.moe/other.jpg");
+        var request = new TtsuImportRequest(
+            incoming,
+            existing.Id,
+            new Dictionary<DateOnly, string>(),
+            reviewedFingerprint,
+            Metadata: new TtsuMetadataImportRequest(selection));
+
+        var receipt = await db.Service.ApplyAsync(Guid.NewGuid(), [request]);
+
+        // Reading succeeds, metadata skipped due to existing Jiten link
+        Assert.Equal(1, receipt.AddedDays);
+        Assert.Equal(0, receipt.MetadataLinks);
+        Assert.Equal(1, receipt.MetadataSkips);
+
+        db.Context.ChangeTracker.Clear();
+        var work = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == existing.Id);
+        Assert.Equal(42, work.JitenDeckId);
+        Assert.Equal("https://example.com/concurrent.jpg", work.CoverUrl);
+        Assert.Equal(MediaCoverSource.JitenSpecific, work.CoverSource);
+        Assert.Single(work.Logs);
+    }
+
+    [Theory]
+    [InlineData(ConcurrentAdditionKind.UserOverride)]
+    [InlineData(ConcurrentAdditionKind.LegacyUnknown)]
+    public async Task ApplyAsync_ConcurrentCoverAddedAfterPreview_DoesNotInvalidateFingerprint_ImportsReadingAndLinksMetadataWhilePreservingCover(ConcurrentAdditionKind additionKind)
+    {
+        await using var db = await ImportDatabase.CreateAsync();
+        var existing = new MediaWork("Concurrent Book");
+        db.Context.Add(existing);
+        await db.Context.SaveChangesAsync();
+
+        // 1. Preview reading plan when work is unlinked
+        var incoming = Book(Entry(100, 1));
+        var plan = await db.Service.PreviewAsync(incoming, existing.Id);
+        var reviewedFingerprint = plan.Fingerprint;
+
+        // 2. Concurrently add cover
+        if (additionKind == ConcurrentAdditionKind.UserOverride)
         {
             existing.UpdateCoverUrl("https://example.com/concurrent.jpg");
         }
@@ -561,19 +637,19 @@ public sealed class TtsuMergeServiceTests
 
         var receipt = await db.Service.ApplyAsync(Guid.NewGuid(), [request]);
 
-        // Reading succeeds, metadata skipped due to commit-time guard
+        // Reading succeeds, metadata is linked, and cover is preserved
         Assert.Equal(1, receipt.AddedDays);
-        Assert.Equal(0, receipt.MetadataLinks);
-        Assert.Equal(1, receipt.MetadataSkips);
+        Assert.Equal(1, receipt.MetadataLinks);
+        Assert.Equal(0, receipt.MetadataSkips);
 
         db.Context.ChangeTracker.Clear();
         var work = await db.Context.MediaWorks.Include(w => w.Logs).SingleAsync(w => w.Id == existing.Id);
-        Assert.Equal(additionKind == ConcurrentAdditionKind.JitenLink ? 42 : null, work.JitenDeckId);
+        Assert.Equal(10, work.JitenDeckId);
+        Assert.Equal(11, work.JitenSubdeckId);
+        Assert.Equal(70_000, work.JitenCharacterCount);
         Assert.Equal("https://example.com/concurrent.jpg", work.CoverUrl);
         Assert.Equal(
-            additionKind == ConcurrentAdditionKind.JitenLink ? MediaCoverSource.JitenSpecific :
-            additionKind == ConcurrentAdditionKind.UserOverride ? MediaCoverSource.UserOverride :
-            MediaCoverSource.LegacyUnknown,
+            additionKind == ConcurrentAdditionKind.UserOverride ? MediaCoverSource.UserOverride : MediaCoverSource.LegacyUnknown,
             work.CoverSource);
         Assert.Single(work.Logs);
     }
@@ -634,9 +710,9 @@ public sealed class TtsuMergeServiceTests
     public async Task ApplyAsync_MixedBatch_LinksOneSkipsAnotherLeavesAnotherWithoutMetadata()
     {
         await using var db = await ImportDatabase.CreateAsync();
-        var existingWithCover = new MediaWork("Existing With Cover");
-        existingWithCover.UpdateCoverUrl("https://example.com/cover.jpg");
-        db.Context.Add(existingWithCover);
+        var existingWithLink = new MediaWork("Existing With Link");
+        existingWithLink.LinkToJitenDeck(99, 120_000, "https://example.com/cover.jpg");
+        db.Context.Add(existingWithLink);
         await db.Context.SaveChangesAsync();
 
         var book1 = BookWithTitle("Book 1", Entry(100, 1));
@@ -644,7 +720,7 @@ public sealed class TtsuMergeServiceTests
         var book3 = BookWithTitle("Book 3", Entry(300, 1));
 
         var plan1 = await db.Service.PreviewAsync(book1, null);
-        var plan2 = await db.Service.PreviewAsync(book2, existingWithCover.Id);
+        var plan2 = await db.Service.PreviewAsync(book2, existingWithLink.Id);
         var plan3 = await db.Service.PreviewAsync(book3, null);
 
         var selection1 = CreateSelection(10, 11, "Jiten 1", 50_000, "https://cdn.jiten.moe/1.jpg");
@@ -653,7 +729,7 @@ public sealed class TtsuMergeServiceTests
         var requests = new List<TtsuImportRequest>
         {
             new(book1, null, new Dictionary<DateOnly, string>(), plan1.Fingerprint, Metadata: new TtsuMetadataImportRequest(selection1)),
-            new(book2, existingWithCover.Id, new Dictionary<DateOnly, string>(), plan2.Fingerprint, Metadata: new TtsuMetadataImportRequest(selection2)),
+            new(book2, existingWithLink.Id, new Dictionary<DateOnly, string>(), plan2.Fingerprint, Metadata: new TtsuMetadataImportRequest(selection2)),
             new(book3, null, new Dictionary<DateOnly, string>(), plan3.Fingerprint, Metadata: null)
         };
 
@@ -672,10 +748,10 @@ public sealed class TtsuMergeServiceTests
         Assert.Equal(10, w1.JitenDeckId);
         Assert.Equal(11, w1.JitenSubdeckId);
 
-        var w2 = works.Single(w => w.Title == "Existing With Cover");
-        Assert.False(w2.HasJitenLink);
+        var w2 = works.Single(w => w.Title == "Existing With Link");
+        Assert.Equal(99, w2.JitenDeckId);
         Assert.Equal("https://example.com/cover.jpg", w2.CoverUrl);
-        Assert.Equal(MediaCoverSource.UserOverride, w2.CoverSource);
+        Assert.Equal(MediaCoverSource.JitenSpecific, w2.CoverSource);
 
         var w3 = works.Single(w => w.Title == "Book 3");
         Assert.False(w3.HasJitenLink);
